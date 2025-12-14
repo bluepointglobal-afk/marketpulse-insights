@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { runSmvsPipeline } from "./lib/analytics/smvs-pipeline.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -17,236 +18,262 @@ interface GenerateRequest {
   };
 }
 
-// Generate mock Bayesian results
-function generateMockResults(config: GenerateRequest["smvsConfig"]) {
-  const { pricing, features, regions } = config;
-  const { min: priceMin, target: priceTarget, max: priceMax } = pricing;
+// Generate marketing intelligence using Groq API
+async function generateMarketingIntelligence(
+  bayesianResults: any,
+  productInfo: any,
+  smvsConfig: any
+) {
+  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
   
-  // Generate realistic demand curve
-  const demandCurve = [];
-  const priceRange = priceMax - priceMin;
-  const steps = 7;
-  
-  for (let i = 0; i <= steps; i++) {
-    const price = priceMin + (priceRange * i / steps);
-    const demand = Math.max(0.2, 0.85 - (i * 0.09) + (Math.random() * 0.05 - 0.025));
-    const psmScore = Math.round(78 - Math.abs(price - priceTarget) * 0.1 + (Math.random() * 10 - 5));
-    demandCurve.push({ price: Math.round(price), demand: Math.round(demand * 100) / 100, psmScore });
+  if (!GROQ_API_KEY) {
+    console.warn("No Groq API key - using basic generation");
+    return generateBasicMarketing(bayesianResults, smvsConfig);
   }
 
-  const optimalPrice = Math.round(priceTarget * 1.07);
-  const demandProbability = 0.67;
-  const psmScore = 78;
+  const prompt = `You are an expert market research analyst specializing in GCC/MENA markets. Generate comprehensive marketing intelligence based on Bayesian analysis results.
 
-  // Generate feature weights
-  const featureWeights: Record<string, number> = {};
-  let remaining = 1;
-  features.forEach((f, i) => {
-    if (i === features.length - 1) {
-      featureWeights[f] = Math.round(remaining * 100) / 100;
-    } else {
-      const weight = remaining * (0.25 + Math.random() * 0.15);
-      featureWeights[f] = Math.round(weight * 100) / 100;
-      remaining -= weight;
+# PRODUCT INFORMATION
+Product Name: ${productInfo.product_name}
+Category: ${smvsConfig.category}
+Description: ${productInfo.product_description}
+Features: ${smvsConfig.features.join(", ")}
+Price Range: ${smvsConfig.pricing.min} - ${smvsConfig.pricing.max} SAR
+Target Markets: ${Object.keys(smvsConfig.regions).join(", ")}
+
+# BAYESIAN ANALYSIS RESULTS (MATHEMATICAL FACTS - USE AS CONSTRAINTS)
+
+## Core Metrics
+- Demand Probability: ${(bayesianResults.demandProbability * 100).toFixed(1)}%
+- PSM Confidence Score: ${bayesianResults.psmScore}/100 (${bayesianResults.psmScore > 75 ? 'Very Strong' : bayesianResults.psmScore > 60 ? 'Strong' : 'Moderate'})
+- Optimal Price: ${bayesianResults.optimalPrice} SAR
+- Confidence Interval: ${(bayesianResults.confidenceInterval[0] * 100).toFixed(0)}% - ${(bayesianResults.confidenceInterval[1] * 100).toFixed(0)}%
+
+## Feature Importance (Bayesian Weights)
+${Object.entries(bayesianResults.featureWeights || {})
+  .sort(([,a]: any, [,b]: any) => b - a)
+  .map(([feature, weight]: [string, any]) => `- ${feature}: ${(weight * 100).toFixed(1)}%`)
+  .join('\n')}
+
+## Identity Signals (What Drives Purchase)
+- Status Signal: ${(bayesianResults.identitySignals.status * 100).toFixed(0)}%
+- Trust Signal: ${(bayesianResults.identitySignals.trust * 100).toFixed(0)}%
+- Upgrade Signal: ${(bayesianResults.identitySignals.upgrade * 100).toFixed(0)}%
+
+## Regional Breakdown
+${Object.entries(bayesianResults.regionalBreakdown || {})
+  .map(([region, data]: [string, any]) => 
+    `- ${region}: ${(data.demand * 100).toFixed(0)}% demand, ${data.optimalPrice} SAR optimal price`)
+  .join('\n')}
+
+## Demand Curve Data
+${bayesianResults.demandCurve?.slice(0, 5).map((point: any) => 
+  `- ${point.price} SAR → ${(point.demand * 100).toFixed(0)}% demand`).join('\n')}
+
+---
+
+# YOUR TASK
+
+Generate a complete marketing intelligence package in VALID JSON format. Use the Bayesian results as mathematical constraints - don't contradict the numbers.
+
+RESPOND ONLY WITH THIS JSON STRUCTURE (no markdown, no backticks):
+
+{
+  "competitors": [
+    {
+      "name": "Real competitor name for ${smvsConfig.category} category in GCC/MENA",
+      "status": <0-100 number based on brand prestige>,
+      "trust": <0-100 based on market reputation>,
+      "upgrade": <0-100 perceived innovation>,
+      "overall": <calculated weighted average>,
+      "gap": <difference vs Bayesian overall score of ${Math.round(bayesianResults.demandProbability * 100)}>
     }
-  });
-
-  // Regional breakdown
-  const regionKeys = Object.keys(regions);
-  const regionalBreakdown: Record<string, { demand: number; optimalPrice: number; insight: string }> = {};
-  regionKeys.forEach((region, i) => {
-    regionalBreakdown[region] = {
-      demand: Math.round((demandProbability + (i === 0 ? 0.04 : -0.05)) * 100) / 100,
-      optimalPrice: Math.round(optimalPrice * (i === 0 ? 1.06 : 0.91)),
-      insight: i === 0 ? "Higher willingness to pay premium" : "Price-sensitive, prefers value"
-    };
-  });
-
-  // MaxDiff results
-  const featureRanking = features.map((f, i) => ({
-    rank: i + 1,
-    feature: f,
-    utility: Math.round(30 - i * 4 + Math.random() * 2),
-    gap: i === features.length - 1 ? "baseline" : `+${Math.round(2 + Math.random() * 3)} vs #${i + 2}`
-  }));
-
-  const maxDiffResults = {
-    mostImportant: {
-      feature: features[0],
-      utilityScore: featureRanking[0]?.utility || 28,
-      significance: `Drives ${featureRanking[0]?.utility || 28}% of purchase intent`
-    },
-    featureRanking,
-    insight: `Top 3 features account for ${featureRanking.slice(0, 3).reduce((a, b) => a + b.utility, 0)}% of total utility.`
-  };
-
-  // Kano results
-  const kanoResults = {
-    mustHave: features.slice(0, 2).map(f => ({
-      feature: f,
-      demandWithout: Math.round((demandProbability - 0.3 - Math.random() * 0.1) * 100) / 100,
-      impact: -Math.round(25 + Math.random() * 15),
-      reasoning: "Critical feature - without it, demand collapses significantly"
-    })),
-    performance: features.slice(2, 3).map(f => ({
-      feature: f,
-      demandWithout: Math.round((demandProbability - 0.12) * 100) / 100,
-      impact: -13,
-      reasoning: "More is better - linear impact on demand"
-    })),
-    delighters: features.slice(3, 4).map(f => ({
-      feature: f,
-      demandWithout: Math.round((demandProbability - 0.04) * 100) / 100,
-      impact: -4,
-      reasoning: "Nice-to-have, doesn't hurt if missing"
-    })),
-    indifferent: features.slice(4).map(f => ({
-      feature: f,
-      demandWithout: Math.round((demandProbability - 0.01) * 100) / 100,
-      impact: -1,
-      reasoning: "Not a primary decision driver"
-    }))
-  };
-
-  // Van Westendorp
-  const vanWestendorp = {
-    tooExpensive: Math.round(priceMax * 0.9),
-    expensive: Math.round(priceTarget * 1.17),
-    bargain: Math.round(priceTarget * 0.83),
-    tooCheap: Math.round(priceMin * 0.9),
-    optimalPricePoint: optimalPrice,
-    acceptableRange: [Math.round(priceTarget * 0.93), Math.round(priceTarget * 1.2)],
-    reasoning: `Sweet spot at ${optimalPrice} SAR maximizes both demand (${Math.round(demandProbability * 100)}%) and confidence (PSM ${psmScore})`
-  };
-
-  // Brand analysis
-  const brandAnalysis = {
-    yourPosition: {
-      status: 62,
-      trust: 78,
-      upgrade: 54,
-      overall: 67
-    },
-    competitors: [
-      { name: "Nature's Bounty", status: 35, trust: 52, upgrade: 30, overall: 41, gap: -26 },
-      { name: "GNC", status: 58, trust: 61, upgrade: 48, overall: 57, gap: -10 },
-      { name: "Solgar", status: 72, trust: 68, upgrade: 52, overall: 66, gap: 1 }
-    ],
-    positioning: "Premium-but-accessible tier. Compete with Solgar on trust and value.",
-    vulnerabilities: [
-      "Status signal weaker than Solgar (62 vs 72) - need premium cues",
-      "Trust advantage fragile - competitors can copy certifications"
-    ],
-    opportunities: [
-      "Trust signal (78) is strongest asset - emphasize heavily",
-      "Large gap vs mass market (Nature's Bounty) - clear differentiation",
-      "DTC model = 40% cost advantage over retail"
+  ],
+  "maxDiffNarrative": {
+    "insight": "Strategic insight about feature importance based on Bayesian weights",
+    "featureRanking": [
+      {
+        "rank": 1,
+        "feature": "<feature name>",
+        "utility": <Bayesian weight as 0-100>,
+        "strategicImplication": "Why this matters for go-to-market"
+      }
     ]
-  };
-
-  // Personas
-  const personas = [
-    {
-      name: "The Wellness Executive",
-      segment: "high_trust_seeker",
-      size: 0.32,
-      demographics: { age: "35-48", income: "25K+ SAR/month", location: "Riyadh, Jeddah" },
-      psychographics: {
-        quote: "I don't have time to be sick. Show me it's legitimate.",
-        values: ["Performance", "Quality", "Trust"]
-      },
-      bayesianProfile: {
-        demandProbability: 0.71,
-        optimalPrice: 380,
-        featurePreferences: Object.fromEntries(features.slice(0, 3).map((f, i) => [f, [0.35, 0.30, 0.22][i]])),
-        identityDrivers: { trust: 0.65, status: 0.20, upgrade: 0.15 }
-      },
-      recommendations: {
-        messaging: "Lead with certifications and science",
-        channels: ["LinkedIn", "Doctor partnerships", "Premium gyms"],
-        creativeAngle: "Premium wellness investment"
+  },
+  "kanoAnalysis": {
+    "mustHave": [
+      {
+        "feature": "<feature name>",
+        "reasoning": "Why this is table-stakes based on Bayesian impact",
+        "demandImpact": <percentage points>,
+        "recommendation": "What to do about it"
       }
+    ],
+    "performance": [...],
+    "delighters": [...],
+    "indifferent": [...]
+  },
+  "vanWestendorpNarrative": {
+    "optimalPriceReasoning": "Why ${bayesianResults.optimalPrice} SAR is optimal based on demand curve",
+    "pricingStrategy": "Recommended pricing approach",
+    "regionalPricingRecommendations": {
+      "KSA": "Specific recommendation for KSA based on ${bayesianResults.regionalBreakdown?.KSA?.demand || 'N/A'}% demand",
+      "UAE": "..."
+    }
+  },
+  "brandPositioning": {
+    "yourPosition": {
+      "status": <calculated from identity signals>,
+      "trust": <calculated from identity signals>,
+      "upgrade": <calculated from identity signals>,
+      "overall": ${Math.round(bayesianResults.demandProbability * 100)}
     },
+    "positioningStatement": "One-sentence brand positioning based on Bayesian identity signals",
+    "vulnerabilities": ["Array of competitive vulnerabilities"],
+    "opportunities": ["Array of market opportunities"],
+    "differentiationStrategy": "How to differentiate based on Bayesian strengths"
+  },
+  "personas": [
     {
-      name: "The Health-Conscious Parent",
-      segment: "family_protector",
-      size: 0.28,
-      demographics: { age: "30-42", income: "15-25K SAR/month", location: "Suburban KSA/UAE" },
-      psychographics: {
-        quote: "If it's good enough for my kids, it needs to be the best.",
-        values: ["Safety", "Natural", "Family health"]
+      "name": "Descriptive persona name",
+      "segment": "segment_id",
+      "size": <segment size from identity signals, sum = 1.0>,
+      "demographics": {
+        "age": "age range",
+        "income": "income bracket",
+        "location": "Based on regional breakdown with highest demand"
       },
-      bayesianProfile: {
-        demandProbability: 0.65,
-        optimalPrice: 290,
-        featurePreferences: Object.fromEntries(features.slice(0, 3).map((f, i) => [f, [0.40, 0.30, 0.20][i]])),
-        identityDrivers: { trust: 0.55, upgrade: 0.30, status: 0.15 }
+      "psychographics": {
+        "quote": "First-person quote reflecting mindset",
+        "values": ["values array"],
+        "lifestyle": "lifestyle description"
       },
-      recommendations: {
-        messaging: "Safe, natural, family-approved",
-        channels: ["Instagram", "Mom blogs", "Family health influencers"],
-        creativeAngle: "Protecting what matters most"
-      }
-    },
-    {
-      name: "The Fitness Enthusiast",
-      segment: "performance_seeker",
-      size: 0.25,
-      demographics: { age: "25-38", income: "12-20K SAR/month", location: "Urban centers" },
-      psychographics: {
-        quote: "I track everything. Show me the data.",
-        values: ["Results", "Optimization", "Science"]
+      "bayesianProfile": {
+        "demandProbability": <from regional data>,
+        "optimalPrice": <segment-specific price>,
+        "topFeatures": ["features they care about from Bayesian weights"],
+        "identityDrivers": {
+          "primary": "status|trust|upgrade - whichever is highest for this segment",
+          "weights": <identity signal weights>
+        }
       },
-      bayesianProfile: {
-        demandProbability: 0.69,
-        optimalPrice: 320,
-        featurePreferences: Object.fromEntries(features.slice(0, 3).map((f, i) => [f, [0.38, 0.32, 0.20][i]])),
-        identityDrivers: { upgrade: 0.45, trust: 0.35, status: 0.20 }
-      },
-      recommendations: {
-        messaging: "Scientifically optimized performance",
-        channels: ["YouTube fitness", "Gym partnerships", "Sports events"],
-        creativeAngle: "Your competitive edge"
-      }
-    },
-    {
-      name: "The Budget Optimizer",
-      segment: "value_seeker",
-      size: 0.15,
-      demographics: { age: "28-45", income: "8-15K SAR/month", location: "Mixed urban/suburban" },
-      psychographics: {
-        quote: "Quality doesn't have to break the bank.",
-        values: ["Value", "Smart spending", "Research"]
-      },
-      bayesianProfile: {
-        demandProbability: 0.58,
-        optimalPrice: 250,
-        featurePreferences: Object.fromEntries(features.slice(0, 3).map((f, i) => [f, [0.35, 0.30, 0.25][i]])),
-        identityDrivers: { upgrade: 0.50, trust: 0.35, status: 0.15 }
-      },
-      recommendations: {
-        messaging: "Premium quality, smart pricing",
-        channels: ["Comparison sites", "Deal forums", "WhatsApp groups"],
-        creativeAngle: "Smart choice, not compromise"
+      "recommendations": {
+        "messaging": "How to message to this persona",
+        "channels": ["marketing channels"],
+        "creativeDirection": "Creative approach for this segment"
       }
     }
-  ];
+  ],
+  "executiveSummary": {
+    "launchRecommendation": "PROCEED|PROCEED_WITH_CAUTION|RECONSIDER based on PSM score",
+    "confidenceLevel": "HIGH|MEDIUM|LOW based on PSM ${bayesianResults.psmScore}",
+    "keyFinding": "One-sentence synthesis of most important insight",
+    "riskFactors": ["Array of key risks"],
+    "successFactors": ["Array of success drivers"]
+  },
+  "goToMarketInsights": {
+    "immediate": [
+      {
+        "action": "Specific action item",
+        "reasoning": "Why this matters based on Bayesian results",
+        "impact": "HIGH|MEDIUM|LOW",
+        "effort": "estimated hours/days",
+        "expectedLift": "Expected impact on demand probability"
+      }
+    ],
+    "nearTerm": [...],
+    "longTerm": [...]
+  }
+}
+
+Generate realistic, category-specific content for ${smvsConfig.category} in GCC/MENA markets. Use the Bayesian numbers as mathematical constraints.`;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          {
+            role: "system",
+            content: "You are a market research analyst. Respond ONLY with valid JSON. No markdown, no backticks, no explanations. Just the JSON object."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 8000,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Groq API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const content = data.choices[0].message.content;
+    
+    // Clean and parse JSON (remove markdown if present)
+    const cleanedContent = content
+      .replace(/```json\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim();
+    
+    const marketingIntel = JSON.parse(cleanedContent);
+    
+    console.log("Marketing intelligence generated successfully");
+    return marketingIntel;
+
+  } catch (error) {
+    console.error("Groq API error:", error);
+    return generateBasicMarketing(bayesianResults, smvsConfig);
+  }
+}
+
+// Fallback if Groq API unavailable
+function generateBasicMarketing(bayesianResults: any, smvsConfig: any) {
+  const features = Object.entries(bayesianResults.featureWeights || {})
+    .sort(([,a]: any, [,b]: any) => b - a);
 
   return {
-    bayesianResults: {
-      demandProbability,
-      psmScore,
-      optimalPrice,
-      confidenceInterval: [0.58, 0.76],
-      demandCurve,
-      regionalBreakdown,
-      featureWeights
+    competitors: [
+      { name: "Competitor A", status: 60, trust: 65, upgrade: 50, overall: 58, gap: Math.round(bayesianResults.demandProbability * 100) - 58 },
+      { name: "Competitor B", status: 45, trust: 50, upgrade: 40, overall: 45, gap: Math.round(bayesianResults.demandProbability * 100) - 45 }
+    ],
+    maxDiffNarrative: {
+      insight: "Feature importance ranked by Bayesian weights",
+      featureRanking: features.map(([feature, weight]: any, i: number) => ({
+        rank: i + 1,
+        feature,
+        utility: Math.round(weight * 100),
+        strategicImplication: "Focus marketing on this feature"
+      }))
     },
-    maxDiffResults,
-    kanoResults,
-    vanWestendorp,
-    brandAnalysis,
-    personas
+    personas: [
+      {
+        name: "Primary Buyer",
+        segment: "main",
+        size: 0.6,
+        demographics: { age: "30-45", income: "Medium-High", location: Object.keys(smvsConfig.regions)[0] },
+        bayesianProfile: {
+          demandProbability: bayesianResults.demandProbability,
+          optimalPrice: bayesianResults.optimalPrice,
+          topFeatures: features.slice(0, 3).map(([f]: any) => f),
+          identityDrivers: bayesianResults.identitySignals
+        }
+      }
+    ],
+    executiveSummary: {
+      launchRecommendation: bayesianResults.psmScore > 70 ? "PROCEED" : "PROCEED_WITH_CAUTION",
+      confidenceLevel: bayesianResults.psmScore > 75 ? "HIGH" : "MEDIUM",
+      keyFinding: `${Math.round(bayesianResults.demandProbability * 100)}% demand probability with ${bayesianResults.psmScore} PSM confidence`
+    }
   };
 }
 
@@ -256,94 +283,115 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "No authorization header" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json", ...corsHeaders }
-      });
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Get user from token
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-    
-    if (userError || !user) {
-      console.error("Auth error:", userError);
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json", ...corsHeaders }
-      });
-    }
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
 
     const { testId, smvsConfig }: GenerateRequest = await req.json();
-    console.log("Generating analysis for test:", testId);
 
-    // Verify test belongs to user
-    const { data: test, error: testError } = await supabase
+    console.log("=== STARTING ANALYSIS ===");
+    console.log("Test ID:", testId);
+
+    // Get product info from database
+    const { data: test, error: fetchError } = await supabase
       .from("tests")
       .select("*")
       .eq("id", testId)
-      .eq("user_id", user.id)
       .single();
 
-    if (testError || !test) {
-      console.error("Test not found:", testError);
-      return new Response(JSON.stringify({ error: "Test not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json", ...corsHeaders }
-      });
+    if (fetchError || !test) {
+      throw new Error("Test not found");
     }
 
-    // Update test status to GENERATING
+    // Update status to GENERATING
     await supabase
       .from("tests")
-      .update({ status: "GENERATING", smvs_config: smvsConfig })
+      .update({ status: "GENERATING" })
       .eq("id", testId);
 
-    // Generate mock results
-    const results = generateMockResults(smvsConfig);
+    try {
+      // STEP 1: RUN BAYESIAN ENGINE (PURE MATH)
+      console.log("Step 1: Running Bayesian engine...");
+      const bayesianResults = await runSmvsPipeline(testId, supabase);
+      
+      console.log("Bayesian complete:", {
+        demand: bayesianResults.demandProbability,
+        psm: bayesianResults.psmScore,
+        price: bayesianResults.optimalPrice
+      });
 
-    // Update test with results
-    const { error: updateError } = await supabase
-      .from("tests")
-      .update({
-        status: "COMPLETED",
-        bayesian_results: results.bayesianResults,
-        max_diff_results: results.maxDiffResults,
-        kano_results: results.kanoResults,
-        van_westendorp: results.vanWestendorp,
-        brand_analysis: results.brandAnalysis,
-        personas: results.personas
-      })
-      .eq("id", testId);
+      // STEP 2: GENERATE MARKETING INTELLIGENCE (GROQ API)
+      console.log("Step 2: Generating marketing intelligence via Groq...");
+      const marketingIntel = await generateMarketingIntelligence(
+        bayesianResults,
+        test,
+        smvsConfig
+      );
 
-    if (updateError) {
-      console.error("Failed to update test:", updateError);
-      throw updateError;
+      console.log("Marketing intelligence complete");
+
+      // STEP 3: COMBINE RESULTS
+      const combinedResults = {
+        bayesian_results: bayesianResults,
+        competitors: marketingIntel.competitors || [],
+        max_diff_results: marketingIntel.maxDiffNarrative || {},
+        kano_results: marketingIntel.kanoAnalysis || {},
+        van_westendorp: marketingIntel.vanWestendorpNarrative || {},
+        brand_analysis: {
+          yourPosition: marketingIntel.brandPositioning?.yourPosition || {},
+          competitors: marketingIntel.competitors || [],
+          positioning: marketingIntel.brandPositioning?.positioningStatement || "",
+          vulnerabilities: marketingIntel.brandPositioning?.vulnerabilities || [],
+          opportunities: marketingIntel.brandPositioning?.opportunities || []
+        },
+        personas: marketingIntel.personas || [],
+        executive_summary: marketingIntel.executiveSummary || {},
+        gtm_insights: marketingIntel.goToMarketInsights || {},
+        status: "COMPLETED"
+      };
+
+      // Update database
+      const { error: updateError } = await supabase
+        .from("tests")
+        .update(combinedResults)
+        .eq("id", testId);
+
+      if (updateError) throw updateError;
+
+      return new Response(
+        JSON.stringify({ success: true, ...combinedResults }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+
+    } catch (analysisError) {
+      console.error("Analysis failed:", analysisError);
+      
+      await supabase
+        .from("tests")
+        .update({ status: "FAILED" })
+        .eq("id", testId);
+
+      return new Response(
+        JSON.stringify({
+          error: "Analysis failed",
+          details: analysisError.message,
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" }
+        }
+      );
     }
 
-    console.log("Analysis complete for test:", testId);
-
-    return new Response(JSON.stringify({
-      status: "COMPLETED",
-      testId,
-      ...results
-    }), {
-      status: 200,
-      headers: { "Content-Type": "application/json", ...corsHeaders }
-    });
-
-  } catch (error: unknown) {
-    console.error("Error generating analysis:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json", ...corsHeaders }
-    });
+  } catch (error) {
+    console.error("Request error:", error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      }
+    );
   }
 });

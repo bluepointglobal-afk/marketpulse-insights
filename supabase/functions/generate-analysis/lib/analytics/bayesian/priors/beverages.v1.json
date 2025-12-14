@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "category": "FOOD_BEVERAGES",
+  "priors": [
+    { "feature": "demand_trial_30d", "region": "GCC",  "distribution": "beta", "params": { "alpha": 18.88, "beta": 21.12 } },
+    { "feature": "demand_trial_30d", "region": "KSA",  "distribution": "beta", "params": { "alpha": 19.60, "beta": 20.40 } },
+    { "feature": "demand_trial_30d", "region": "MENA", "distribution": "beta", "params": { "alpha": 12.15, "beta": 17.85 } },
+    { "feature": "online_share", "region": "GCC", "distribution": "beta", "params": { "alpha": 7.20, "beta": 22.80 } },
+    { "feature": "online_share", "region": "KSA", "distribution": "beta", "params": { "alpha": 6.60, "beta": 23.40 } },
+    { "feature": "online_share", "region": "MENA", "distribution": "beta", "params": { "alpha": 3.25, "beta": 21.75 } },
+    { "feature": "health_low_sugar_pref", "region": "GCC", "distribution": "beta", "params": { "alpha": 14.00, "beta": 21.00 } },
+    { "feature": "health_low_sugar_pref", "region": "KSA", "distribution": "beta", "params": { "alpha": 12.60, "beta": 22.40 } },
+    { "feature": "health_low_sugar_pref", "region": "MENA", "distribution": "beta", "params": { "alpha": 9.00,  "beta": 21.00 } },
+    { "feature": "price_monitoring_high", "region": "GCC", "distribution": "beta", "params": { "alpha": 21.60, "beta": 8.40 } },
+    { "feature": "price_monitoring_high", "region": "KSA", "distribution": "beta", "params": { "alpha": 24.60, "beta": 5.40 } },
+    { "feature": "premium_accept_20p", "region": "GCC", "distribution": "beta", "params": { "alpha": 8.40, "beta": 21.60 } },
+    { "feature": "premium_accept_20p", "region": "KSA", "distribution": "beta", "params": { "alpha": 7.20, "beta": 22.80 } }
+  ],
+  "identity_weights": {
+    "GCC":  { "S": 0.22, "T": 0.46, "U": 0.32 },
+    "KSA":  { "S": 0.21, "T": 0.48, "U": 0.31 },
+    "MENA": { "S": 0.23, "T": 0.43, "U": 0.34 }
+  }
+}

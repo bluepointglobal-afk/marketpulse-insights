@@ -1,0 +1,18 @@
+import type { Category, PriorsFile } from '../../types';
+
+// Simple static loader for now; later swap to DB if needed.
+export async function loadPriorsForCategory(category: Category): Promise<PriorsFile> {
+  switch (category) {
+    case 'FOOD_SNACKS':
+      return (await import('./snacks.v1.json')).default as PriorsFile;
+    case 'FOOD_BEVERAGES':
+      return (await import('./beverages.v1.json')).default as PriorsFile;
+    default:
+      throw new Error(`No priors file for category: ${category}`);
+  }
+}
+
+// Helper (optional)
+export function findPrior(file: PriorsFile, feature: string, region: string) {
+  return file.priors.find(p => p.feature === feature && p.region === region);
+}

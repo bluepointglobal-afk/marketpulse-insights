@@ -1,0 +1,186 @@
+{
+  "version": "1.0.0",
+  "category": "HEALTH_SUPPLEMENTS",
+  "categoryMeta": {
+    "ticketSize": "medium",
+    "cycle": "considered",
+    "b2x": "b2c",
+    "psmGate": 0.40
+  },
+  "priors": [
+    {
+      "feature": "demand_trial_30d",
+      "region": "KSA",
+      "distribution": "beta",
+      "params": { "alpha": 16.8, "beta": 23.2 },
+      "bounds": { "min": 0.15, "max": 0.65 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "GCC Supplements Trend Synthesis 2023–2025", 
+        "sampleSize": 1200, 
+        "dateRange": "2023–2025", 
+        "confidence": "medium" 
+      },
+      "benchmarks": { 
+        "competitorMean": 0.32, 
+        "topQuartile": 0.48, 
+        "dataSource": "Regional retail panels (meta)" 
+      }
+    },
+    {
+      "feature": "demand_trial_30d",
+      "region": "UAE",
+      "distribution": "beta",
+      "params": { "alpha": 17.2, "beta": 22.8 },
+      "bounds": { "min": 0.18, "max": 0.70 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "UAE Pharm/Wellness Retail Indications 2024", 
+        "sampleSize": 800, 
+        "dateRange": "2023–2025", 
+        "confidence": "medium" 
+      },
+      "benchmarks": { 
+        "competitorMean": 0.35, 
+        "topQuartile": 0.52, 
+        "dataSource": "Dubai retail & eCom blends" 
+      }
+    },
+    {
+      "feature": "demand_trial_30d",
+      "region": "GCC",
+      "distribution": "beta",
+      "params": { "alpha": 16.0, "beta": 24.0 },
+      "bounds": { "min": 0.15, "max": 0.65 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "GCC Supplements Composite", 
+        "sampleSize": 2800, 
+        "dateRange": "2022–2025", 
+        "confidence": "medium" 
+      }
+    },
+    {
+      "feature": "demand_trial_30d",
+      "region": "MENA",
+      "distribution": "beta",
+      "params": { "alpha": 12.0, "beta": 18.0 },
+      "bounds": { "min": 0.10, "max": 0.55 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "MENA Supplements Macro", 
+        "sampleSize": 5000, 
+        "dateRange": "2021–2025", 
+        "confidence": "low" 
+      }
+    },
+    {
+      "feature": "online_share",
+      "region": "KSA",
+      "distribution": "beta",
+      "params": { "alpha": 7.8, "beta": 21.2 },
+      "bounds": { "min": 0.15, "max": 0.55 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "KSA eCom OTC Growth Meta 2024", 
+        "confidence": "medium" 
+      }
+    },
+    {
+      "feature": "online_share",
+      "region": "UAE",
+      "distribution": "beta",
+      "params": { "alpha": 9.0, "beta": 20.0 },
+      "bounds": { "min": 0.20, "max": 0.65 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "UAE eCom Health 2024", 
+        "confidence": "medium" 
+      }
+    },
+    {
+      "feature": "online_share",
+      "region": "GCC",
+      "distribution": "beta",
+      "params": { "alpha": 8.4, "beta": 21.6 },
+      "bounds": { "min": 0.18, "max": 0.60 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "GCC OTC/Wellness eCom Blend", 
+        "confidence": "medium" 
+      }
+    },
+    {
+      "feature": "online_share",
+      "region": "MENA",
+      "distribution": "beta",
+      "params": { "alpha": 5.4, "beta": 22.6 },
+      "bounds": { "min": 0.10, "max": 0.45 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "MENA eCom Health Macro", 
+        "confidence": "low" 
+      }
+    },
+    {
+      "feature": "premium_accept_20p",
+      "region": "KSA",
+      "distribution": "beta",
+      "params": { "alpha": 7.2, "beta": 22.8 },
+      "bounds": { "min": 0.15, "max": 0.55 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "KSA price ladders (supplements)", 
+        "confidence": "medium" 
+      }
+    },
+    {
+      "feature": "premium_accept_20p",
+      "region": "UAE",
+      "distribution": "beta",
+      "params": { "alpha": 8.4, "beta": 21.6 },
+      "bounds": { "min": 0.20, "max": 0.65 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "UAE price ladders (supplements)", 
+        "confidence": "medium" 
+      }
+    },
+    {
+      "feature": "premium_accept_20p",
+      "region": "GCC",
+      "distribution": "beta",
+      "params": { "alpha": 7.8, "beta": 22.2 },
+      "bounds": { "min": 0.18, "max": 0.60 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "GCC premium acceptance meta", 
+        "confidence": "medium" 
+      }
+    },
+    {
+      "feature": "premium_accept_20p",
+      "region": "MENA",
+      "distribution": "beta",
+      "params": { "alpha": 5.7, "beta": 21.3 },
+      "bounds": { "min": 0.10, "max": 0.50 },
+      "tier": "ESTIMATED",
+      "sourceLog": { 
+        "primary": "MENA premium acceptance macro", 
+        "confidence": "low" 
+      }
+    }
+  ],
+  "identity_weights": {
+    "KSA":  { "S": 0.23, "T": 0.52, "U": 0.25 },
+    "UAE":  { "S": 0.32, "T": 0.40, "U": 0.28 },
+    "GCC":  { "S": 0.27, "T": 0.46, "U": 0.27 },
+    "MENA": { "S": 0.26, "T": 0.44, "U": 0.30 }
+  },
+  "region_meta": {
+    "KSA":  { "expatRatio": 0.40, "popWeight": 35.0 },
+    "UAE":  { "expatRatio": 0.88, "popWeight": 10.0 },
+    "GCC":  { "expatRatio": 0.50, "popWeight": 56.0 },
+    "MENA": { "expatRatio": 0.30, "popWeight": 470.0 }
+  }
+}

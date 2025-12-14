@@ -1,0 +1,24 @@
+{
+  "version": "1.0.0",
+  "category": "FOOD_SNACKS",
+  "priors": [
+    { "feature": "demand_trial_30d", "region": "GCC",  "distribution": "beta", "params": { "alpha": 17.96, "beta": 22.04 } },
+    { "feature": "demand_trial_30d", "region": "KSA",  "distribution": "beta", "params": { "alpha": 18.82, "beta": 21.18 } },
+    { "feature": "demand_trial_30d", "region": "MENA", "distribution": "beta", "params": { "alpha": 11.70, "beta": 18.30 } },
+    { "feature": "online_share", "region": "GCC", "distribution": "beta", "params": { "alpha": 6.60, "beta": 23.40 } },
+    { "feature": "online_share", "region": "KSA", "distribution": "beta", "params": { "alpha": 6.00, "beta": 24.00 } },
+    { "feature": "online_share", "region": "MENA", "distribution": "beta", "params": { "alpha": 3.00, "beta": 22.00 } },
+    { "feature": "clean_label_pref", "region": "GCC", "distribution": "beta", "params": { "alpha": 12.78, "beta": 22.22 } },
+    { "feature": "clean_label_pref", "region": "KSA", "distribution": "beta", "params": { "alpha": 11.55, "beta": 23.45 } },
+    { "feature": "clean_label_pref", "region": "MENA", "distribution": "beta", "params": { "alpha": 8.40, "beta": 21.60 } },
+    { "feature": "price_monitoring_high", "region": "GCC", "distribution": "beta", "params": { "alpha": 21.00, "beta": 9.00 } },
+    { "feature": "price_monitoring_high", "region": "KSA", "distribution": "beta", "params": { "alpha": 24.00, "beta": 6.00 } },
+    { "feature": "premium_accept_20p", "region": "GCC", "distribution": "beta", "params": { "alpha": 7.80, "beta": 22.20 } },
+    { "feature": "premium_accept_20p", "region": "KSA", "distribution": "beta", "params": { "alpha": 6.60, "beta": 23.40 } }
+  ],
+  "identity_weights": {
+    "GCC":  { "S": 0.25, "T": 0.45, "U": 0.30 },
+    "KSA":  { "S": 0.23, "T": 0.47, "U": 0.30 },
+    "MENA": { "S": 0.26, "T": 0.42, "U": 0.32 }
+  }
+}

@@ -1,10 +1,16 @@
 /**
  * Posterior Calculator - Beta-Binomial Updates + PSM
- * 
- * INSTALL TO: src/lib/analytics/bayesian/posterior.ts
  */
 
-import type { PosteriorFeature } from './bfp'
+export interface PosteriorFeature {
+  mean: number
+  ci95: [number, number]
+  psm: number
+  alpha: number
+  beta: number
+  calibrationN?: number
+  tier: 'REAL' | 'ESTIMATED' | 'INFERRED'
+}
 
 export interface BetaDistribution {
   alpha: number
@@ -70,12 +76,7 @@ export function betaCredibleInterval(params: BetaDistribution): [number, number]
 
 /**
  * Posterior Sharpness Metric (PSM)
- * 
  * PSM = (σ²_prior - σ²_posterior) / σ²_prior
- * 
- * Range: [0, 1]
- * - 0 = no information gained (posterior = prior)
- * - 1 = perfect information (no uncertainty remaining)
  */
 export function calculatePSM(
   prior: BetaDistribution,
@@ -87,8 +88,6 @@ export function calculatePSM(
   if (priorVar === 0) return 0
   
   const psm = (priorVar - postVar) / priorVar
-  
-  // Clamp to [0, 1]
   return Math.max(0, Math.min(1, psm))
 }
 
@@ -98,7 +97,6 @@ export function calculatePSM(
 export function betaUpdateFeature(input: BetaUpdateInput): PosteriorFeature {
   const { prior, observations, calibrationSource } = input
   
-  // If no observations, posterior = prior (PSM = 0)
   if (!observations || observations.trials === 0) {
     const mean = betaMean(prior)
     const ci95 = betaCredibleInterval(prior)
@@ -114,7 +112,6 @@ export function betaUpdateFeature(input: BetaUpdateInput): PosteriorFeature {
     }
   }
   
-  // Update posterior
   const posterior = betaUpdate(prior, observations)
   const mean = betaMean(posterior)
   const ci95 = betaCredibleInterval(posterior)
@@ -133,14 +130,12 @@ export function betaUpdateFeature(input: BetaUpdateInput): PosteriorFeature {
 
 /**
  * Calculate overall PSM from multiple features
- * Uses weighted average based on feature importance
  */
 export function calculateOverallPSM(features: {
   demand_trial_30d: PosteriorFeature
   premium_accept_20p: PosteriorFeature
   online_share: PosteriorFeature
 }): number {
-  // Weights: demand is most important
   const weights = {
     demand_trial_30d: 0.50,
     premium_accept_20p: 0.30,

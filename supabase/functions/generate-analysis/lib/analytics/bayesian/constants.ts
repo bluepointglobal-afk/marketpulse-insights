@@ -1,8 +1,6 @@
 /**
  * SMVS v1.0 Constants
  * All thresholds and configuration
- * 
- * INSTALL TO: src/lib/analytics/bayesian/constants.ts
  */
 
 export const SMVS_VERSION = "1.0"
@@ -22,12 +20,9 @@ export const MIN_CALIBRATION_SAMPLE = 50
 export const RECOMMENDED_CALIBRATION_SAMPLE = 120
 export const LARGE_CALIBRATION_SAMPLE = 200
 
-// Feature Flags
-export const FEATURE_FLAG_SMVS = process.env.SMVS_ENABLED === "1" || 
-                                  process.env.NEXT_PUBLIC_SMVS_ENABLED === "1"
-
-export const DEBUG_SMVS = process.env.SMVS_DEBUG === "1" || 
-                          process.env.NEXT_PUBLIC_SMVS_DEBUG === "1"
+// Feature Flags (Deno compatible)
+export const FEATURE_FLAG_SMVS = Deno.env.get("SMVS_ENABLED") === "1"
+export const DEBUG_SMVS = Deno.env.get("SMVS_DEBUG") === "1"
 
 // Cache Configuration
 export const BFP_CACHE_TTL_HOURS = 24

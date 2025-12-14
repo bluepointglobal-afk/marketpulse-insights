@@ -1,140 +1,115 @@
 /**
  * SMVS Pipeline Orchestrator
  * End-to-end flow from config to results
- * 
- * INSTALL TO: src/lib/analytics/smvs-pipeline.ts
  */
 
-import { prisma } from '@/lib/db'
-import { buildBFP } from './bayesian/build-bfp'
-import { generateRecommendations } from './recommendation/engine'
-import { buildPersonas } from './segmentation/personas'
-import type { BayesianFactPack } from './bayesian/bfp'
-import type { Recommendation } from './recommendation/engine'
-import type { Persona } from './segmentation/personas'
+import { buildBFP } from "./bayesian/build-bfp.ts"
+import type { BayesianFactPack } from "./bayesian/bfp.ts"
 
 export interface SmvsPipelineResult {
   bfp: BayesianFactPack
-  recommendations: Recommendation[]
-  personas: Persona[]
-  narratives: any
+  demandProbability: number
+  psmScore: number
+  optimalPrice: number
+  confidenceInterval: [number, number]
+  featureWeights: Record<string, number>
+  identitySignals: {
+    status: number
+    trust: number
+    upgrade: number
+  }
+  regionalBreakdown: Record<string, {
+    demand: number
+    optimalPrice: number
+  }>
+  demandCurve: Array<{ price: number; demand: number }>
   meta: {
     duration: number
     cached: boolean
   }
 }
 
-export function shouldRunSmvs(test: any): boolean {
-  if (!test) return false
-  if (!test.smvsEnabled) return false
-  if (!test.smvsConfig) return false
-  
-  const config = test.smvsConfig as any
-  if (!config.category) return false
-  if (!config.regions || config.regions.length === 0) return false
-  
-  return true
+export interface SmvsConfig {
+  category: string
+  regions: Record<string, number>
+  identitySignals: Record<string, number>
+  pricing: { min: number; target: number; max: number }
+  features: string[]
 }
 
-export async function getCachedSmvsResults(testId: string): Promise<SmvsPipelineResult | null> {
-  const test = await prisma.test.findUnique({
-    where: { id: testId },
-    select: {
-      smvsBfpSnapshot: true,
-      smvsRecommendations: true,
-      smvsPersonas: true,
-      smvsNarratives: true,
-      smvsLastRunAt: true
-    }
-  })
-  
-  if (!test || !test.smvsBfpSnapshot) return null
-  
-  const hoursSinceRun = test.smvsLastRunAt 
-    ? (Date.now() - new Date(test.smvsLastRunAt).getTime()) / (1000 * 60 * 60)
-    : 999
-  
-  if (hoursSinceRun > 24) return null
-  
-  return {
-    bfp: test.smvsBfpSnapshot as unknown as BayesianFactPack,
-    recommendations: (test.smvsRecommendations || []) as unknown as Recommendation[],
-    personas: (test.smvsPersonas || []) as unknown as Persona[],
-    narratives: test.smvsNarratives || null,
-    meta: {
-      duration: 0,
-      cached: true
-    }
-  }
-}
-
-export async function runSmvsPipeline(testId: string): Promise<SmvsPipelineResult> {
+export async function runSmvsPipeline(
+  testId: string,
+  smvsConfig: SmvsConfig
+): Promise<SmvsPipelineResult> {
   const startTime = Date.now()
   
-  const test = await prisma.test.findUnique({
-    where: { id: testId },
-    include: {
-      audiences: true
-    }
-  })
-  
-  if (!test) throw new Error('Test not found')
-  if (!shouldRunSmvs(test)) throw new Error('SMVS not enabled or configured')
-  
-  const config = test.smvsConfig as any
-  const calibrations = test.smvsCalibration as any[]
-  
+  // Build BFP with config
   const bfp = await buildBFP({
     testId,
-    category: config.category,
-    regions: config.regions,
-    productName: test.name,
-    targetPrice: config.pricing?.target || 100,
-    competitorRange: config.pricing ? {
-      min: config.pricing.min,
-      max: config.pricing.max
-    } : undefined,
-    identity: config.identitySignals,
-    regionWeights: config.regionWeights?.weights,
-    mode: test.dataMode as any || 'PRIORS_ONLY',
-    calibrations: calibrations || []
+    category: smvsConfig.category,
+    regions: Object.keys(smvsConfig.regions),
+    productName: 'Product',
+    targetPrice: smvsConfig.pricing.target,
+    competitorRange: {
+      min: smvsConfig.pricing.min,
+      max: smvsConfig.pricing.max
+    },
+    identity: {
+      status: smvsConfig.identitySignals.status || 0.33,
+      trust: smvsConfig.identitySignals.trust || 0.34,
+      upgrade: smvsConfig.identitySignals.upgrade || 0.33,
+      method: 'user_input'
+    },
+    regionWeights: smvsConfig.regions,
+    mode: 'PRIORS_ONLY',
+    calibrations: []
   })
   
-  const recommendations = generateRecommendations(bfp)
-  const personas = buildPersonas(bfp)
+  // Generate feature weights based on config
+  const featureWeights: Record<string, number> = {}
+  smvsConfig.features.forEach((feature, index) => {
+    featureWeights[feature] = Math.max(0.1, 1 - (index * 0.15))
+  })
   
-  let narratives = null
-  try {
-    // Groq narratives generation would go here
-    // For now, using simple templates
-    narratives = {
-      execSummary: {
-        headline: `${bfp.summary.recommendedAction}: PSM ${(bfp.summary.overall_psm * 100).toFixed(0)}%`,
-        bullets: recommendations.slice(0, 3).map(r => r.action)
-      }
+  // Generate regional breakdown
+  const regionalBreakdown: Record<string, { demand: number; optimalPrice: number }> = {}
+  Object.entries(smvsConfig.regions).forEach(([region, weight]) => {
+    // Adjust demand based on region weight
+    const regionDemand = bfp.posteriors.demand_trial_30d.mean * (0.8 + weight * 0.4)
+    regionalBreakdown[region] = {
+      demand: Math.min(1, regionDemand),
+      optimalPrice: bfp.pricing.optimalPrice * (0.9 + weight * 0.2)
     }
-  } catch (error) {
-    console.error('Narrative generation failed, using fallback')
+  })
+  
+  // Generate demand curve
+  const demandCurve: Array<{ price: number; demand: number }> = []
+  const priceStep = (smvsConfig.pricing.max - smvsConfig.pricing.min) / 10
+  for (let i = 0; i <= 10; i++) {
+    const price = smvsConfig.pricing.min + (i * priceStep)
+    const priceRatio = price / smvsConfig.pricing.target
+    const baseDemand = bfp.posteriors.demand_trial_30d.mean
+    // Simple elasticity model
+    const demand = baseDemand * Math.pow(0.9, (priceRatio - 1) * 5)
+    demandCurve.push({ price: Math.round(price), demand: Math.max(0, Math.min(1, demand)) })
   }
-  
-  await prisma.test.update({
-    where: { id: testId },
-    data: {
-      smvsBfpSnapshot: bfp as any,
-      smvsRecommendations: recommendations as any,
-      smvsPersonas: personas as any,
-      smvsNarratives: narratives as any,
-      smvsLastRunAt: new Date()
-    }
-  })
   
   const duration = Date.now() - startTime
   
   return {
     bfp,
-    recommendations,
-    personas,
-    narratives,
+    demandProbability: bfp.posteriors.demand_trial_30d.mean,
+    psmScore: Math.round(bfp.summary.overall_psm * 100),
+    optimalPrice: bfp.pricing.optimalPrice,
+    confidenceInterval: bfp.posteriors.demand_trial_30d.ci95,
+    featureWeights,
+    identitySignals: {
+      status: bfp.identity.status,
+      trust: bfp.identity.trust,
+      upgrade: bfp.identity.upgrade
+    },
+    regionalBreakdown,
+    demandCurve,
     meta: {
       duration,
       cached: false

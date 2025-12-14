@@ -1,14 +1,58 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Brain, Check } from "lucide-react";
 import { loadingMessages } from "@/lib/mockData";
+import { useTests } from "@/hooks/useTests";
 
 const GeneratingTest = () => {
   const navigate = useNavigate();
+  const { testId } = useParams();
+  const location = useLocation();
+  const { generateAnalysis } = useTests();
+  const formData = location.state?.formData;
+  
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [progress, setProgress] = useState(0);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    if (!testId || !formData) {
+      navigate("/dashboard");
+      return;
+    }
+
+    // Start generation
+    const runGeneration = async () => {
+      if (isGenerating) return;
+      setIsGenerating(true);
+
+      try {
+        await generateAnalysis(testId, {
+          category: formData.category,
+          regions: formData.regionWeights,
+          identitySignals: formData.identitySignals,
+          pricing: {
+            min: formData.priceMin,
+            target: formData.priceTarget,
+            max: formData.priceMax
+          },
+          features: formData.features
+        });
+
+        // Navigate to results
+        navigate(`/dashboard/test/${testId}/results`);
+      } catch (error) {
+        console.error("Generation failed:", error);
+        navigate("/dashboard");
+      }
+    };
+
+    // Delay to show animation
+    const timer = setTimeout(runGeneration, 2000);
+    return () => clearTimeout(timer);
+  }, [testId, formData, navigate, generateAnalysis, isGenerating]);
 
   useEffect(() => {
     // Rotate through loading messages
@@ -31,17 +75,11 @@ const GeneratingTest = () => {
       });
     }, 1000);
 
-    // Navigate to results after "analysis"
-    const timeout = setTimeout(() => {
-      navigate("/dashboard/test/demo/results");
-    }, 30000);
-
     return () => {
       clearInterval(messageInterval);
       clearInterval(progressInterval);
-      clearTimeout(timeout);
     };
-  }, [navigate]);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -56,7 +94,6 @@ const GeneratingTest = () => {
           <div className="absolute inset-0 flex items-center justify-center">
             <Brain className="w-12 h-12 text-primary-foreground" />
           </div>
-          {/* Orbiting dots */}
           <div className="absolute inset-0 animate-spin" style={{ animationDuration: '3s' }}>
             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 w-2 h-2 rounded-full bg-primary" />
           </div>

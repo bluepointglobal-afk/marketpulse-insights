@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { 
@@ -16,7 +15,9 @@ import {
   CreditCard
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { sampleTest, TestResults } from "@/lib/mockData";
+import { useAuth } from "@/contexts/AuthContext";
+import { useTests } from "@/hooks/useTests";
+import { useToast } from "@/hooks/use-toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,18 +28,29 @@ import {
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [tests, setTests] = useState<TestResults[]>([sampleTest]);
-  
-  const user = {
-    name: "John Doe",
-    email: "john@example.com",
-    credits: 0,
-    tier: "PRO" as const,
-    totalCredits: 10
+  const { profile, signOut } = useAuth();
+  const { tests, loading, deleteTest } = useTests();
+  const { toast } = useToast();
+
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteTest(id);
+      toast({
+        title: "Test deleted",
+        description: "Your market validation test has been deleted.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete test. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setTests(tests.filter(t => t.id !== id));
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/auth");
   };
 
   const formatDate = (dateString: string) => {
@@ -47,6 +59,14 @@ const Dashboard = () => {
       day: 'numeric',
       year: 'numeric'
     });
+  };
+
+  const getTierCredits = (tier: string) => {
+    switch (tier) {
+      case "PRO": return 10;
+      case "ENTERPRISE": return 999;
+      default: return 1;
+    }
   };
 
   return (
@@ -67,7 +87,7 @@ const Dashboard = () => {
               <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary">
                 <CreditCard className="w-4 h-4 text-primary" />
                 <span className="text-sm font-medium">
-                  {user.credits} / {user.totalCredits} credits
+                  {profile?.credits ?? 0} / {getTierCredits(profile?.tier || "FREE")} credits
                 </span>
               </div>
 
@@ -77,15 +97,15 @@ const Dashboard = () => {
                   <Button variant="ghost" size="icon" className="rounded-full">
                     <div className="w-8 h-8 rounded-full gradient-bg flex items-center justify-center">
                       <span className="text-xs font-semibold text-primary-foreground">
-                        {user.name.split(' ').map(n => n[0]).join('')}
+                        {profile?.name?.split(' ').map(n => n[0]).join('') || profile?.email?.[0]?.toUpperCase() || 'U'}
                       </span>
                     </div>
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <div className="px-2 py-1.5">
-                    <p className="font-medium">{user.name}</p>
-                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                    <p className="font-medium">{profile?.name || "User"}</p>
+                    <p className="text-sm text-muted-foreground">{profile?.email}</p>
                   </div>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
@@ -103,7 +123,7 @@ const Dashboard = () => {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem 
                     className="text-destructive focus:text-destructive"
-                    onClick={() => navigate("/auth")}
+                    onClick={handleSignOut}
                   >
                     <LogOut className="w-4 h-4 mr-2" />
                     Sign out
@@ -118,7 +138,7 @@ const Dashboard = () => {
       {/* Main Content */}
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Credits Banner */}
-        {user.credits === 0 && (
+        {profile?.credits === 0 && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -154,8 +174,12 @@ const Dashboard = () => {
           </Button>
         </div>
 
-        {/* Test List */}
-        {tests.length > 0 ? (
+        {/* Loading State */}
+        {loading ? (
+          <div className="flex items-center justify-center py-16">
+            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : tests.length > 0 ? (
           <div className="grid gap-4">
             {tests.map((test, index) => (
               <motion.div
@@ -186,13 +210,13 @@ const Dashboard = () => {
                         <Clock className="w-3 h-3" />
                         {formatDate(test.createdAt)}
                       </span>
-                      <span>{test.category.replace('_', ' ')}</span>
-                      <span>{test.targetMarket.join(', ')}</span>
+                      <span>{test.category?.replace('_', ' ') || 'Uncategorized'}</span>
+                      <span>{test.targetMarket?.join(', ') || 'No markets'}</span>
                     </div>
                   </div>
 
                   {/* Metrics */}
-                  {test.status === 'COMPLETED' && (
+                  {test.status === 'COMPLETED' && test.bayesianResults && (
                     <div className="flex items-center gap-6">
                       <div className="text-center">
                         <p className="text-2xl font-bold gradient-text">
@@ -217,15 +241,19 @@ const Dashboard = () => {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" asChild>
-                      <Link to={`/dashboard/test/${test.id}/results`}>
-                        <Eye className="w-4 h-4 mr-1" />
-                        View
-                      </Link>
-                    </Button>
-                    <Button variant="ghost" size="sm">
-                      <FileDown className="w-4 h-4" />
-                    </Button>
+                    {test.status === 'COMPLETED' && (
+                      <>
+                        <Button variant="outline" size="sm" asChild>
+                          <Link to={`/dashboard/test/${test.id}/results`}>
+                            <Eye className="w-4 h-4 mr-1" />
+                            View
+                          </Link>
+                        </Button>
+                        <Button variant="ghost" size="sm">
+                          <FileDown className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon">
@@ -233,17 +261,21 @@ const Dashboard = () => {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link to={`/dashboard/test/${test.id}/results`}>
-                            <Eye className="w-4 h-4 mr-2" />
-                            View Results
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <FileDown className="w-4 h-4 mr-2" />
-                          Export PDF
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
+                        {test.status === 'COMPLETED' && (
+                          <>
+                            <DropdownMenuItem asChild>
+                              <Link to={`/dashboard/test/${test.id}/results`}>
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Results
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem>
+                              <FileDown className="w-4 h-4 mr-2" />
+                              Export PDF
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                          </>
+                        )}
                         <DropdownMenuItem 
                           className="text-destructive focus:text-destructive"
                           onClick={() => handleDelete(test.id)}

@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { categories, regions } from "@/lib/mockData";
+import { useTests } from "@/hooks/useTests";
+import { useToast } from "@/hooks/use-toast";
 
 type WizardStep = 1 | 2 | 3 | 4;
 
@@ -39,9 +41,12 @@ interface FormData {
 
 const NewTest = () => {
   const navigate = useNavigate();
+  const { createTest } = useTests();
+  const { toast } = useToast();
   const [step, setStep] = useState<WizardStep>(1);
   const [newFeature, setNewFeature] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<FormData>({
     productName: "",
@@ -118,8 +123,33 @@ const NewTest = () => {
     }
   };
 
-  const handleSubmit = () => {
-    navigate("/dashboard/test/generating");
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      const test = await createTest({
+        productName: formData.productName,
+        productDescription: formData.productDescription,
+        category: formData.category,
+        targetMarket: formData.targetMarkets,
+        priceMin: formData.priceMin,
+        priceTarget: formData.priceTarget,
+        priceMax: formData.priceMax,
+        features: formData.features
+      });
+      
+      // Navigate to generating page with test ID and form data
+      navigate(`/dashboard/test/generating/${test.id}`, { 
+        state: { formData } 
+      });
+    } catch (error) {
+      console.error("Error creating test:", error);
+      toast({
+        title: "Error",
+        description: "Failed to create test. Please try again.",
+        variant: "destructive"
+      });
+      setIsSubmitting(false);
+    }
   };
 
   const toggleMarket = (market: string) => {

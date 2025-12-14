@@ -6,11 +6,13 @@ import { Label } from "@/components/ui/label";
 import { Brain, Mail, Lock, User, ArrowRight, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 const Auth = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, signIn, signUp, loading: authLoading } = useAuth();
   
   const [mode, setMode] = useState<"signin" | "signup">(
     searchParams.get("mode") === "signup" ? "signup" : "signin"
@@ -24,6 +26,13 @@ const Auth = () => {
     email: "",
     password: "",
   });
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && !authLoading) {
+      navigate("/dashboard");
+    }
+  }, [user, authLoading, navigate]);
 
   useEffect(() => {
     const modeParam = searchParams.get("mode");
@@ -64,18 +73,52 @@ const Auth = () => {
 
     setIsLoading(true);
     
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    
-    toast({
-      title: mode === "signup" ? "Account created!" : "Welcome back!",
-      description: mode === "signup" 
-        ? "Your account has been created. Redirecting to dashboard..."
-        : "You've been signed in successfully.",
-    });
+    try {
+      let result;
+      
+      if (mode === "signup") {
+        result = await signUp(formData.email, formData.password, formData.name);
+      } else {
+        result = await signIn(formData.email, formData.password);
+      }
 
-    setIsLoading(false);
-    navigate("/dashboard");
+      if (result.error) {
+        // Handle specific error messages
+        let errorMessage = result.error.message;
+        
+        if (errorMessage.includes("User already registered")) {
+          errorMessage = "An account with this email already exists. Try signing in instead.";
+        } else if (errorMessage.includes("Invalid login credentials")) {
+          errorMessage = "Invalid email or password. Please try again.";
+        }
+        
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+
+      toast({
+        title: mode === "signup" ? "Account created!" : "Welcome back!",
+        description: mode === "signup" 
+          ? "Your account has been created. Redirecting to dashboard..."
+          : "You've been signed in successfully.",
+      });
+
+      navigate("/dashboard");
+    } catch (error) {
+      console.error("Auth error:", error);
+      toast({
+        title: "Error",
+        description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,6 +128,14 @@ const Auth = () => {
       setErrors((prev) => ({ ...prev, [name]: "" }));
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">
@@ -229,7 +280,7 @@ const Auth = () => {
           </div>
 
           {/* Google OAuth */}
-          <Button variant="outline" className="w-full" size="lg">
+          <Button variant="outline" className="w-full" size="lg" disabled>
             <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
               <path
                 fill="currentColor"
@@ -248,7 +299,7 @@ const Auth = () => {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            Google
+            Google (Coming Soon)
           </Button>
 
           {/* Toggle mode */}

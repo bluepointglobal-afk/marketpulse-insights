@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
@@ -12,12 +12,11 @@ import {
   BarChart3,
   Users,
   FileText,
-  Check,
-  AlertTriangle,
   Lightbulb
 } from "lucide-react";
 import { motion } from "framer-motion";
-import { sampleTest } from "@/lib/mockData";
+import { useTests } from "@/hooks/useTests";
+import type { TestResults as TestResultsType } from "@/lib/mockData";
 import OverviewTab from "@/components/results/OverviewTab";
 import FeaturesTab from "@/components/results/FeaturesTab";
 import PricingTab from "@/components/results/PricingTab";
@@ -26,8 +25,37 @@ import PersonasTab from "@/components/results/PersonasTab";
 import ReportsTab from "@/components/results/ReportsTab";
 
 const TestResults = () => {
+  const { testId } = useParams();
+  const navigate = useNavigate();
+  const { getTest } = useTests();
   const [activeTab, setActiveTab] = useState("overview");
-  const test = sampleTest;
+  const [test, setTest] = useState<TestResultsType | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTest = async () => {
+      if (!testId) {
+        navigate("/dashboard");
+        return;
+      }
+
+      try {
+        const testData = await getTest(testId);
+        if (!testData || testData.status !== "COMPLETED") {
+          navigate("/dashboard");
+          return;
+        }
+        setTest(testData);
+      } catch (error) {
+        console.error("Error fetching test:", error);
+        navigate("/dashboard");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTest();
+  }, [testId, navigate, getTest]);
 
   const tabs = [
     { value: "overview", label: "Overview", icon: TrendingUp },
@@ -37,6 +65,18 @@ const TestResults = () => {
     { value: "personas", label: "Personas", icon: Users },
     { value: "reports", label: "Reports", icon: FileText },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!test) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background">

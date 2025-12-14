@@ -71,6 +71,11 @@ ${demandCurveLines}
 Generate a complete marketing intelligence package in VALID JSON format with: competitors, maxDiffNarrative, kanoAnalysis, vanWestendorpNarrative, brandPositioning, personas, executiveSummary, goToMarketInsights. Respond ONLY with valid JSON.`;
 
   try {
+    console.log("Calling Groq API with key:", GROQ_API_KEY ? `${GROQ_API_KEY.substring(0, 10)}...` : "MISSING");
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+    
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -84,19 +89,33 @@ Generate a complete marketing intelligence package in VALID JSON format with: co
           { role: "user", content: prompt }
         ],
         temperature: 0.7,
-        max_tokens: 8000,
+        max_tokens: 4000,
       }),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeoutId);
 
-    if (!response.ok) throw new Error(`Groq API error: ${response.status}`);
+    console.log("Groq API response status:", response.status);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("Groq API error response:", errorText);
+      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+    }
 
     const data = await response.json();
+    console.log("Groq API response received, parsing...");
+    
     const content = data.choices[0].message.content;
     const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
-    return JSON.parse(cleanedContent);
+    const parsed = JSON.parse(cleanedContent);
+    console.log("Marketing intelligence generated successfully");
+    return parsed;
   } catch (error) {
     console.error("Groq API error:", error);
+    console.log("Falling back to basic marketing generation");
     return generateBasicMarketing(bayesianResults, smvsConfig);
   }
 }

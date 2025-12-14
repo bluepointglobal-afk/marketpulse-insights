@@ -1,17 +1,14 @@
 /**
  * BFP Builder - Main Orchestrator
- * 
- * INSTALL TO: src/lib/analytics/bayesian/build-bfp.ts
  */
 
-import type { BayesianFactPack, PosteriorFeature } from './bfp'
-import { betaUpdateFeature, calculateOverallPSM, determineRecommendation } from './posterior'
-import type { CategoryCode } from '@/lib/taxonomy/categories'
-import crypto from 'crypto'
+import type { BayesianFactPack } from "./bfp.ts"
+import type { PosteriorFeature } from "./posterior.ts"
+import { betaUpdateFeature, calculateOverallPSM, determineRecommendation } from "./posterior.ts"
 
 export interface BFPBuilderInput {
   testId: string
-  category: CategoryCode
+  category: string
   regions: string[]
   productName: string
   targetPrice: number
@@ -54,7 +51,7 @@ function getDominantIdentity(identity: {
   return 'U'
 }
 
-function generateSMVSHash(bfp: Partial<BayesianFactPack>): string {
+async function generateSMVSHash(bfp: Partial<BayesianFactPack>): Promise<string> {
   const hashInput = JSON.stringify({
     category: bfp.meta?.category,
     regions: bfp.meta?.regions,
@@ -62,7 +59,13 @@ function generateSMVSHash(bfp: Partial<BayesianFactPack>): string {
     identity: bfp.identity,
     timestamp: bfp.meta?.timestamp
   })
-  return crypto.createHash('sha256').update(hashInput).digest('hex')
+  
+  // Use Web Crypto API (Deno compatible)
+  const encoder = new TextEncoder()
+  const data = encoder.encode(hashInput)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 function generateBPCRCode(tier: string, psm: number): string {
@@ -113,7 +116,7 @@ export async function buildBFP(input: BFPBuilderInput): Promise<BayesianFactPack
   const { adjusted: adjustedDemand, factor: adjustmentFactor } = 
     applyIdentityAdjustment(demand_trial_30d.mean, identity)
   
-  const demand_adjusted = {
+  const demand_adjusted: PosteriorFeature = {
     ...demand_trial_30d,
     mean: adjustedDemand
   }
@@ -186,13 +189,13 @@ export async function buildBFP(input: BFPBuilderInput): Promise<BayesianFactPack
     regionWeights: input.regionWeights
   }
   
-  bfp.smvs!.hash = generateSMVSHash(bfp)
+  bfp.smvs!.hash = await generateSMVSHash(bfp)
   
   return bfp
 }
 
 export async function buildQuickBFP(
-  category: CategoryCode,
+  category: string,
   region: string,
   targetPrice: number
 ): Promise<BayesianFactPack> {

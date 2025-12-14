@@ -14,7 +14,116 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      profiles: {
+        Row: {
+          created_at: string
+          credits: number
+          email: string
+          id: string
+          name: string | null
+          tier: Database["public"]["Enums"]["user_tier"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          credits?: number
+          email: string
+          id: string
+          name?: string | null
+          tier?: Database["public"]["Enums"]["user_tier"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          credits?: number
+          email?: string
+          id?: string
+          name?: string | null
+          tier?: Database["public"]["Enums"]["user_tier"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      tests: {
+        Row: {
+          bayesian_results: Json | null
+          brand_analysis: Json | null
+          category: string | null
+          created_at: string
+          features: Json | null
+          id: string
+          kano_results: Json | null
+          max_diff_results: Json | null
+          personas: Json | null
+          price_max: number | null
+          price_min: number | null
+          price_target: number | null
+          product_description: string
+          product_name: string
+          smvs_config: Json | null
+          smvs_enabled: boolean | null
+          status: Database["public"]["Enums"]["test_status"]
+          target_market: Json | null
+          updated_at: string
+          user_id: string
+          van_westendorp: Json | null
+        }
+        Insert: {
+          bayesian_results?: Json | null
+          brand_analysis?: Json | null
+          category?: string | null
+          created_at?: string
+          features?: Json | null
+          id?: string
+          kano_results?: Json | null
+          max_diff_results?: Json | null
+          personas?: Json | null
+          price_max?: number | null
+          price_min?: number | null
+          price_target?: number | null
+          product_description: string
+          product_name: string
+          smvs_config?: Json | null
+          smvs_enabled?: boolean | null
+          status?: Database["public"]["Enums"]["test_status"]
+          target_market?: Json | null
+          updated_at?: string
+          user_id: string
+          van_westendorp?: Json | null
+        }
+        Update: {
+          bayesian_results?: Json | null
+          brand_analysis?: Json | null
+          category?: string | null
+          created_at?: string
+          features?: Json | null
+          id?: string
+          kano_results?: Json | null
+          max_diff_results?: Json | null
+          personas?: Json | null
+          price_max?: number | null
+          price_min?: number | null
+          price_target?: number | null
+          product_description?: string
+          product_name?: string
+          smvs_config?: Json | null
+          smvs_enabled?: boolean | null
+          status?: Database["public"]["Enums"]["test_status"]
+          target_market?: Json | null
+          updated_at?: string
+          user_id?: string
+          van_westendorp?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +132,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      test_status:
+        | "DRAFT"
+        | "CONFIGURING"
+        | "GENERATING"
+        | "COMPLETED"
+        | "FAILED"
+      user_tier: "FREE" | "PRO" | "ENTERPRISE"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +265,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      test_status: [
+        "DRAFT",
+        "CONFIGURING",
+        "GENERATING",
+        "COMPLETED",
+        "FAILED",
+      ],
+      user_tier: ["FREE", "PRO", "ENTERPRISE"],
+    },
   },
 } as const

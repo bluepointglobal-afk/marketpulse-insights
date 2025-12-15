@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { 
@@ -12,7 +13,9 @@ import {
   LogOut,
   User,
   Settings,
-  CreditCard
+  CreditCard,
+  RefreshCw,
+  AlertCircle
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,8 +32,9 @@ import {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { profile, signOut } = useAuth();
-  const { tests, loading, deleteTest } = useTests();
+  const { tests, loading, deleteTest, retryGeneration, fetchTests } = useTests();
   const { toast } = useToast();
+  const [retrying, setRetrying] = useState<string | null>(null);
 
   const handleDelete = async (id: string) => {
     try {
@@ -51,6 +55,27 @@ const Dashboard = () => {
   const handleSignOut = async () => {
     await signOut();
     navigate("/auth");
+  };
+
+  const handleRetry = async (testId: string) => {
+    setRetrying(testId);
+    try {
+      await retryGeneration(testId);
+      toast({
+        title: "Analysis started",
+        description: "Your analysis is being regenerated. This may take up to 60 seconds.",
+      });
+      // Refresh tests list after a delay
+      setTimeout(() => fetchTests(), 2000);
+    } catch (error) {
+      toast({
+        title: "Retry failed",
+        description: error instanceof Error ? error.message : "Failed to retry analysis",
+        variant: "destructive",
+      });
+    } finally {
+      setRetrying(null);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -199,10 +224,13 @@ const Dashboard = () => {
                           ? 'bg-green/10 text-green' 
                           : test.status === 'GENERATING'
                           ? 'bg-orange/10 text-orange'
+                          : test.status === 'FAILED'
+                          ? 'bg-destructive/10 text-destructive'
                           : 'bg-muted text-muted-foreground'
                       }`}>
                         {test.status === 'COMPLETED' ? '✓ Completed' : 
-                         test.status === 'GENERATING' ? '⏳ Generating' : test.status}
+                         test.status === 'GENERATING' ? '⏳ Generating' : 
+                         test.status === 'FAILED' ? '✕ Failed' : test.status}
                       </span>
                     </div>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -253,6 +281,17 @@ const Dashboard = () => {
                           <FileDown className="w-4 h-4" />
                         </Button>
                       </>
+                    )}
+                    {(test.status === 'FAILED' || test.status === 'GENERATING') && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleRetry(test.id)}
+                        disabled={retrying === test.id}
+                      >
+                        <RefreshCw className={`w-4 h-4 mr-1 ${retrying === test.id ? 'animate-spin' : ''}`} />
+                        {retrying === test.id ? 'Retrying...' : 'Retry'}
+                      </Button>
                     )}
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

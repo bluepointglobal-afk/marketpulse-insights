@@ -7,9 +7,56 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+const HARD_TIMEOUT_MS = 55000; // 55 seconds hard timeout (Supabase has 60s limit)
+
 interface GenerateRequest {
   testId: string;
   smvsConfig: SmvsConfig;
+}
+
+// Helper to create job audit entry
+async function createJobAudit(supabase: any, testId: string, step: string, metadata?: any) {
+  const { data, error } = await supabase
+    .from("job_audit")
+    .insert({
+      test_id: testId,
+      status: "STARTED",
+      step,
+      metadata: metadata || {}
+    })
+    .select("id")
+    .single();
+  
+  if (error) console.error("Failed to create job audit:", error);
+  return data?.id;
+}
+
+// Helper to update job audit
+async function updateJobAudit(supabase: any, auditId: string, status: string, errorMessage?: string) {
+  if (!auditId) return;
+  
+  const update: any = {
+    status,
+    ended_at: new Date().toISOString()
+  };
+  if (errorMessage) update.error_message = errorMessage;
+  
+  const { error } = await supabase
+    .from("job_audit")
+    .update(update)
+    .eq("id", auditId);
+  
+  if (error) console.error("Failed to update job audit:", error);
+}
+
+// Wrap async operation with timeout
+function withTimeout<T>(promise: Promise<T>, ms: number, timeoutMsg: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => 
+      setTimeout(() => reject(new Error(timeoutMsg)), ms)
+    )
+  ]);
 }
 
 async function generateMarketingIntelligence(
@@ -157,60 +204,92 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  );
 
-    const { testId, smvsConfig }: GenerateRequest = await req.json();
+  let testId: string | undefined;
+  let auditId: string | undefined;
+
+  try {
+    const body: GenerateRequest = await req.json();
+    testId = body.testId;
+    const smvsConfig = body.smvsConfig;
+
     console.log("=== STARTING ANALYSIS ===", testId);
+    
+    // Create audit entry
+    auditId = await createJobAudit(supabase, testId, "INIT", { smvsConfig });
 
     const { data: test, error: fetchError } = await supabase
       .from("tests").select("*").eq("id", testId).single();
 
-    if (fetchError || !test) throw new Error("Test not found");
-
-    await supabase.from("tests").update({ status: "GENERATING" }).eq("id", testId);
-
-    try {
-      console.log("Step 1: Running Bayesian engine...");
-      const bayesianResults = await runSmvsPipeline(testId, smvsConfig);
-      
-      console.log("Step 2: Generating marketing intelligence...");
-      const marketingIntel = await generateMarketingIntelligence(bayesianResults, test, smvsConfig);
-
-      const combinedResults = {
-        bayesian_results: bayesianResults,
-        competitors: marketingIntel.competitors || [],
-        max_diff_results: marketingIntel.maxDiffNarrative || {},
-        kano_results: marketingIntel.kanoAnalysis || {},
-        van_westendorp: marketingIntel.vanWestendorpNarrative || {},
-        brand_analysis: {
-          yourPosition: marketingIntel.brandPositioning?.yourPosition || {},
-          competitors: marketingIntel.competitors || [],
-          positioning: marketingIntel.brandPositioning?.positioningStatement || "",
-        },
-        personas: marketingIntel.personas || [],
-        status: "COMPLETED"
-      };
-
-      await supabase.from("tests").update(combinedResults).eq("id", testId);
-
-      return new Response(JSON.stringify({ success: true, ...combinedResults }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-
-    } catch (analysisError: unknown) {
-      console.error("Analysis failed:", analysisError);
-      await supabase.from("tests").update({ status: "FAILED" }).eq("id", testId);
-      const msg = analysisError instanceof Error ? analysisError.message : 'Unknown error';
-      return new Response(JSON.stringify({ error: "Analysis failed", details: msg }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    if (fetchError || !test) {
+      throw new Error("Test not found");
     }
 
+    await supabase.from("tests").update({ status: "GENERATING" }).eq("id", testId);
+    await updateJobAudit(supabase, auditId!, "RUNNING");
+
+    // Wrap the entire analysis in a hard timeout
+    const analysisPromise = async () => {
+      console.log("Step 1: Running Bayesian engine...");
+      await updateJobAudit(supabase, auditId!, "RUNNING");
+      
+      const bayesianResults = await runSmvsPipeline(testId!, smvsConfig);
+      console.log("Bayesian engine complete");
+
+      console.log("Step 2: Generating marketing intelligence...");
+      const marketingIntel = await generateMarketingIntelligence(bayesianResults, test, smvsConfig);
+      console.log("Marketing intelligence complete");
+
+      return { bayesianResults, marketingIntel };
+    };
+
+    const { bayesianResults, marketingIntel } = await withTimeout(
+      analysisPromise(),
+      HARD_TIMEOUT_MS,
+      `Analysis timed out after ${HARD_TIMEOUT_MS / 1000}s`
+    );
+
+    const combinedResults = {
+      bayesian_results: bayesianResults,
+      competitors: marketingIntel.competitors || [],
+      max_diff_results: marketingIntel.maxDiffNarrative || {},
+      kano_results: marketingIntel.kanoAnalysis || {},
+      van_westendorp: marketingIntel.vanWestendorpNarrative || {},
+      brand_analysis: {
+        yourPosition: marketingIntel.brandPositioning?.yourPosition || {},
+        competitors: marketingIntel.competitors || [],
+        positioning: marketingIntel.brandPositioning?.positioningStatement || "",
+      },
+      personas: marketingIntel.personas || [],
+      status: "COMPLETED"
+    };
+
+    await supabase.from("tests").update(combinedResults).eq("id", testId);
+    await updateJobAudit(supabase, auditId!, "COMPLETED");
+
+    console.log("=== ANALYSIS COMPLETE ===", testId);
+
+    return new Response(JSON.stringify({ success: true, ...combinedResults }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
   } catch (error: unknown) {
-    console.error("Request error:", error);
     const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.error("=== ANALYSIS FAILED ===", testId, msg);
+
+    // Update test to FAILED
+    if (testId) {
+      await supabase.from("tests").update({ status: "FAILED" }).eq("id", testId);
+    }
+
+    // Update audit
+    if (auditId) {
+      await updateJobAudit(supabase, auditId, "FAILED", msg);
+    }
+
     return new Response(JSON.stringify({ error: msg }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }

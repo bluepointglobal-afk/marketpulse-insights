@@ -268,7 +268,21 @@ serve(async (req) => {
       status: "COMPLETED"
     };
 
-    await supabase.from("tests").update(combinedResults).eq("id", testId);
+    console.log("Saving results to database for test:", testId);
+    console.log("Combined results keys:", Object.keys(combinedResults));
+    
+    const { data: updateData, error: updateError } = await supabase
+      .from("tests")
+      .update(combinedResults)
+      .eq("id", testId)
+      .select();
+
+    if (updateError) {
+      console.error("DATABASE UPDATE FAILED:", updateError.message, updateError.details, updateError.hint);
+      throw new Error(`Failed to save results: ${updateError.message}`);
+    }
+
+    console.log("Database update successful, rows affected:", updateData?.length || 0);
     await updateJobAudit(supabase, auditId!, "COMPLETED");
 
     console.log("=== ANALYSIS COMPLETE ===", testId);

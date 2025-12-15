@@ -9,7 +9,7 @@ const corsHeaders = {
 };
 
 const HARD_TIMEOUT_MS = 55000; // 55 seconds hard timeout (Supabase has 60s limit)
-const GROQ_TIMEOUT_MS = 50000; // 50 seconds for Groq (complex analysis needs time)
+const OPENROUTER_TIMEOUT_MS = 50000; // 50 seconds for OpenRouter (complex analysis needs time)
 
 interface GenerateRequest {
   testId: string;
@@ -66,13 +66,13 @@ async function generateMarketingIntelligence(
   productInfo: any,
   smvsConfig: SmvsConfig
 ) {
-  const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+  const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
 
   console.log("=== MARKETING INTELLIGENCE GENERATION ===");
-  console.log("GROQ_API_KEY present:", !!GROQ_API_KEY);
+  console.log("OPENROUTER_API_KEY present:", !!OPENROUTER_API_KEY);
 
-  if (!GROQ_API_KEY) {
-    console.warn("❌ No Groq API key configured - using basic generation");
+  if (!OPENROUTER_API_KEY) {
+    console.warn("❌ No OpenRouter API key configured - using basic generation");
     return generateBasicMarketing(bayesianResults, smvsConfig);
   }
 
@@ -101,35 +101,36 @@ async function generateMarketingIntelligence(
   console.log("📊 Bayesian results - Demand:", bayesianResults.demandProbability, "| PSM:", bayesianResults.psmScore);
 
   try {
-    console.log("🚀 Calling Groq API with investment-grade prompt...");
-    console.log("   Model: llama-3.3-70b-versatile");
-    console.log("   Timeout:", GROQ_TIMEOUT_MS / 1000, "seconds");
-    console.log("   Max tokens: 8000");
+    console.log("🚀 Calling OpenRouter API with Claude 3.7 Sonnet...");
+    console.log("   Model: anthropic/claude-3.7-sonnet");
+    console.log("   Timeout:", OPENROUTER_TIMEOUT_MS / 1000, "seconds");
+    console.log("   Max tokens: 16000");
 
     const startTime = Date.now();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log("⏱️ Groq API timeout triggered after", GROQ_TIMEOUT_MS / 1000, "s");
+      console.log("⏱️ OpenRouter API timeout triggered after", OPENROUTER_TIMEOUT_MS / 1000, "s");
       controller.abort();
-    }, GROQ_TIMEOUT_MS);
+    }, OPENROUTER_TIMEOUT_MS);
 
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${GROQ_API_KEY}`,
+        "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+        "HTTP-Referer": "https://marketpulse-insights.lovable.app",
+        "X-Title": "MarketPulse",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
+        model: "anthropic/claude-3.7-sonnet",
         messages: [
-          {
-            role: "system",
-            content: "You are a McKinsey senior partner specializing in GCC/MENA market entry. Return ONLY valid JSON matching the exact schema provided. No markdown, no code fences, no preamble. Every insight must be specific, actionable, and grounded in the Bayesian data provided.",
-          },
-          { role: "user", content: prompt },
+          { 
+            role: "user", 
+            content: prompt 
+          }
         ],
-        temperature: 0.3, // Lower for more consistent output
-        max_tokens: 8000, // Increased for comprehensive analysis
+        temperature: 0.7,
+        max_tokens: 16000,
       }),
       signal: controller.signal,
     });
@@ -137,19 +138,19 @@ async function generateMarketingIntelligence(
     clearTimeout(timeoutId);
     const elapsed = Date.now() - startTime;
 
-    console.log("📥 Groq API response received in", elapsed, "ms");
+    console.log("📥 OpenRouter API response received in", elapsed, "ms");
     console.log("   Status:", response.status, response.statusText);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("❌ Groq API error response:");
+      console.error("❌ OpenRouter API error response:");
       console.error("   Status:", response.status);
       console.error("   Body:", errorText);
-      throw new Error(`Groq API error: ${response.status} - ${errorText}`);
+      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log("✅ Groq API JSON parsed successfully");
+    console.log("✅ OpenRouter API JSON parsed successfully");
     console.log("   Choices count:", data.choices?.length || 0);
     console.log("   Usage:", JSON.stringify(data.usage || {}));
     console.log("   Finish reason:", data.choices?.[0]?.finish_reason);
@@ -158,7 +159,7 @@ async function generateMarketingIntelligence(
     console.log("📄 Response content length:", content?.length || 0, "characters");
 
     if (!content) {
-      console.warn("⚠️ Groq returned empty content - falling back");
+      console.warn("⚠️ OpenRouter returned empty content - falling back");
       return generateBasicMarketing(bayesianResults, smvsConfig);
     }
 
@@ -174,7 +175,7 @@ async function generateMarketingIntelligence(
     try {
       parsed = JSON.parse(cleanedContent);
     } catch (parseError) {
-      console.error("❌ Failed to parse Groq response as JSON:");
+      console.error("❌ Failed to parse OpenRouter response as JSON:");
       console.error("   Parse error:", parseError);
       console.error("   Raw content (first 1000 chars):", cleanedContent.substring(0, 1000));
       return generateBasicMarketing(bayesianResults, smvsConfig);
@@ -198,14 +199,14 @@ async function generateMarketingIntelligence(
 
     // If we got a partial response, still use what we got but log it
     if (!hasCompetitors || !hasPersonas) {
-      console.warn("⚠️ Groq returned incomplete analysis - some sections missing");
+      console.warn("⚠️ Claude returned incomplete analysis - some sections missing");
       // Don't fallback completely - try to use what we got
     }
 
     // Transform the comprehensive response to match our database schema
     return transformInvestmentGradeResponse(parsed, bayesianResults, smvsConfig);
   } catch (error) {
-    console.error("❌ Groq API call failed:");
+    console.error("❌ OpenRouter API call failed:");
     console.error("   Error type:", (error as any)?.constructor?.name);
     console.error("   Error message:", error instanceof Error ? error.message : String(error));
     console.log("⚠️ Falling back to basic marketing generation");

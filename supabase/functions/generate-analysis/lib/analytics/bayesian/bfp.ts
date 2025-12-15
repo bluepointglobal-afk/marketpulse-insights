@@ -55,20 +55,21 @@ export interface BayesianFactPack {
   regionWeights?: Record<string, number>
 }
 
+// PSM is now on 0-100 scale
 export function getConfidenceLevel(psm: number): string {
-  if (psm >= 0.60) return 'Very High'
-  if (psm >= 0.55) return 'High'
-  if (psm >= 0.40) return 'Moderate'
-  if (psm >= 0.30) return 'Low'
+  if (psm >= 60) return 'Very High'
+  if (psm >= 55) return 'High'
+  if (psm >= 40) return 'Moderate'
+  if (psm >= 30) return 'Low'
   return 'Insufficient'
 }
 
 export function isActionable(bfp: BayesianFactPack): boolean {
-  return bfp.summary.overall_psm >= 0.40
+  return bfp.summary.overall_psm >= 40
 }
 
 export function getPSMClass(psm: number): 'GO' | 'REVISE' | 'NO-GO' {
-  if (psm >= 0.40) return 'GO'
-  if (psm >= 0.30) return 'REVISE'
+  if (psm >= 60) return 'GO'
+  if (psm >= 40) return 'REVISE'
   return 'NO-GO'
 }

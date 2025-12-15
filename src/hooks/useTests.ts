@@ -192,6 +192,38 @@ export function useTests() {
     return response.data;
   };
 
+  const retryGeneration = async (testId: string) => {
+    // Get the test's smvs_config
+    const { data: test, error: fetchError } = await supabase
+      .from("tests")
+      .select("smvs_config, category, target_market, price_min, price_target, price_max, features")
+      .eq("id", testId)
+      .single();
+
+    if (fetchError || !test) throw new Error("Test not found");
+
+    // Build smvsConfig from stored data or defaults
+    const smvsConfig = test.smvs_config || {
+      category: test.category || "HEALTH_SUPPLEMENTS",
+      regions: { GCC: 0.6, MENA: 0.4 },
+      identitySignals: { status: 0.5, trust: 0.5, upgrade: 0.5 },
+      pricing: {
+        min: test.price_min || 10,
+        target: test.price_target || 50,
+        max: test.price_max || 100
+      },
+      features: test.features || []
+    };
+
+    return generateAnalysis(testId, smvsConfig as {
+      category: string;
+      regions: Record<string, number>;
+      identitySignals: Record<string, number>;
+      pricing: { min: number; target: number; max: number };
+      features: string[];
+    });
+  };
+
   return {
     tests,
     loading,
@@ -200,6 +232,7 @@ export function useTests() {
     createTest,
     deleteTest,
     getTest,
-    generateAnalysis
+    generateAnalysis,
+    retryGeneration
   };
 }

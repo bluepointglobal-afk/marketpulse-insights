@@ -66,8 +66,12 @@ async function generateMarketingIntelligence(
 ) {
   const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
   
+  console.log("=== MARKETING INTELLIGENCE GENERATION ===");
+  console.log("GROQ_API_KEY present:", !!GROQ_API_KEY);
+  console.log("GROQ_API_KEY length:", GROQ_API_KEY?.length || 0);
+  
   if (!GROQ_API_KEY) {
-    console.warn("No Groq API key - using basic generation");
+    console.warn("❌ No Groq API key configured - using basic generation");
     return generateBasicMarketing(bayesianResults, smvsConfig);
   }
 
@@ -117,11 +121,21 @@ ${demandCurveLines}
 
 Generate a complete marketing intelligence package in VALID JSON format with: competitors, maxDiffNarrative, kanoAnalysis, vanWestendorpNarrative, brandPositioning, personas, executiveSummary, goToMarketInsights. Respond ONLY with valid JSON.`;
 
+  console.log("📝 Prompt length:", prompt.length, "characters");
+  console.log("📊 Input data - Product:", productInfo.product_name, "| Category:", smvsConfig.category);
+  console.log("📊 Bayesian results - Demand:", bayesianResults.demandProbability, "| PSM:", bayesianResults.psmScore);
+
   try {
-    console.log("Calling Groq API with key:", GROQ_API_KEY ? `${GROQ_API_KEY.substring(0, 10)}...` : "MISSING");
+    console.log("🚀 Calling Groq API...");
+    console.log("   Model: llama-3.3-70b-versatile");
+    console.log("   Timeout: 45 seconds");
     
+    const startTime = Date.now();
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 second timeout
+    const timeoutId = setTimeout(() => {
+      console.log("⏱️ Groq API timeout triggered after 45s");
+      controller.abort();
+    }, 45000);
     
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -142,27 +156,51 @@ Generate a complete marketing intelligence package in VALID JSON format with: co
     });
     
     clearTimeout(timeoutId);
+    const elapsed = Date.now() - startTime;
 
-    console.log("Groq API response status:", response.status);
+    console.log("📥 Groq API response received in", elapsed, "ms");
+    console.log("   Status:", response.status, response.statusText);
+    console.log("   Headers:", JSON.stringify(Object.fromEntries(response.headers.entries())));
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Groq API error response:", errorText);
+      console.error("❌ Groq API error response:");
+      console.error("   Status:", response.status);
+      console.error("   Body:", errorText);
       throw new Error(`Groq API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
-    console.log("Groq API response received, parsing...");
+    console.log("✅ Groq API JSON parsed successfully");
+    console.log("   Choices count:", data.choices?.length || 0);
+    console.log("   Usage:", JSON.stringify(data.usage || {}));
+    console.log("   Finish reason:", data.choices?.[0]?.finish_reason);
     
     const content = data.choices[0].message.content;
+    console.log("📄 Response content length:", content?.length || 0, "characters");
+    console.log("📄 Response preview:", content?.substring(0, 200) + "...");
+    
     const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     
-    const parsed = JSON.parse(cleanedContent);
-    console.log("Marketing intelligence generated successfully");
-    return parsed;
+    try {
+      const parsed = JSON.parse(cleanedContent);
+      console.log("✅ Marketing intelligence JSON parsed successfully");
+      console.log("   Keys:", Object.keys(parsed).join(", "));
+      console.log("   Competitors count:", parsed.competitors?.length || 0);
+      console.log("   Personas count:", parsed.personas?.length || 0);
+      return parsed;
+    } catch (parseError) {
+      console.error("❌ Failed to parse Groq response as JSON:");
+      console.error("   Parse error:", parseError);
+      console.error("   Raw content (first 500 chars):", cleanedContent.substring(0, 500));
+      throw parseError;
+    }
   } catch (error) {
-    console.error("Groq API error:", error);
-    console.log("Falling back to basic marketing generation");
+    console.error("❌ Groq API call failed:");
+    console.error("   Error type:", error?.constructor?.name);
+    console.error("   Error message:", error instanceof Error ? error.message : String(error));
+    console.error("   Stack:", error instanceof Error ? error.stack : "N/A");
+    console.log("⚠️ Falling back to basic marketing generation");
     return generateBasicMarketing(bayesianResults, smvsConfig);
   }
 }

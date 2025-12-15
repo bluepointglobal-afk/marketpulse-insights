@@ -1,1 +1,7 @@
 project_id = "ijvnktjtiyjaplvfeckx"
+
+[functions.generate-analysis]
+verify_jwt = false
+
+[functions.regenerate-marketing]
+verify_jwt = false

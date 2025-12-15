@@ -277,6 +277,15 @@ const Dashboard = () => {
                             View
                           </Link>
                         </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleRetry(test.id)}
+                          disabled={retrying === test.id}
+                          title="Re-run analysis"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${retrying === test.id ? 'animate-spin' : ''}`} />
+                        </Button>
                         <Button variant="ghost" size="sm">
                           <FileDown className="w-4 h-4" />
                         </Button>
@@ -307,6 +316,13 @@ const Dashboard = () => {
                                 <Eye className="w-4 h-4 mr-2" />
                                 View Results
                               </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handleRetry(test.id)}
+                              disabled={retrying === test.id}
+                            >
+                              <RefreshCw className={`w-4 h-4 mr-2 ${retrying === test.id ? 'animate-spin' : ''}`} />
+                              Re-run Analysis
                             </DropdownMenuItem>
                             <DropdownMenuItem>
                               <FileDown className="w-4 h-4 mr-2" />

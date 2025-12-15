@@ -785,6 +785,11 @@ function generateBasicMarketing(bayesianResults: any, smvsConfig: SmvsConfig) {
   };
 }
 
+// Background task handler declaration for TypeScript
+declare const EdgeRuntime: {
+  waitUntil: (promise: Promise<any>) => void;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -818,96 +823,99 @@ serve(async (req) => {
     await supabase.from("tests").update({ status: "GENERATING" }).eq("id", testId);
     await updateJobAudit(supabase, auditId!, "RUNNING");
 
-    // Wrap the entire analysis in a hard timeout
-    const analysisPromise = async () => {
-      console.log("Step 1: Running Bayesian engine...");
-      await updateJobAudit(supabase, auditId!, "RUNNING");
-      
-      const bayesianResults = await runSmvsPipeline(testId!, smvsConfig);
-      console.log("Bayesian engine complete");
+    // Run Bayesian engine synchronously (fast)
+    console.log("Step 1: Running Bayesian engine...");
+    const bayesianResults = await runSmvsPipeline(testId!, smvsConfig);
+    console.log("Bayesian engine complete");
+    console.log("📊 Pipeline results - PSM:", bayesianResults.psmScore, "| Optimal Price:", bayesianResults.optimalPrice, "SAR");
 
-      console.log("Step 2: Generating investment-grade marketing intelligence...");
-      const marketingIntel = await generateMarketingIntelligence(bayesianResults, test, smvsConfig);
-      console.log("Marketing intelligence complete");
+    // Define the background task for Claude (slow)
+    const backgroundAnalysis = async () => {
+      try {
+        console.log("Step 2: [BACKGROUND] Starting marketing intelligence generation...");
+        const marketingIntel = await generateMarketingIntelligence(bayesianResults, test, smvsConfig);
+        console.log("Marketing intelligence complete");
 
-      return { bayesianResults, marketingIntel };
+        const combinedResults = {
+          bayesian_results: bayesianResults,
+          max_diff_results: {
+            ...marketingIntel.maxDiffNarrative,
+            featureMatrix: marketingIntel.maxDiffNarrative?.featureMatrix || {},
+            roadmap: marketingIntel.maxDiffNarrative?.roadmap || {},
+          },
+          kano_results: marketingIntel.kanoAnalysis || {},
+          van_westendorp: {
+            ...marketingIntel.vanWestendorpNarrative,
+            priceArchitecture: marketingIntel.vanWestendorpNarrative?.priceArchitecture || {},
+            regionalPricing: marketingIntel.vanWestendorpNarrative?.regionalPricing || {},
+          },
+          brand_analysis: {
+            yourPosition: marketingIntel.brandPositioning?.yourPosition || {},
+            competitors: marketingIntel.competitors || [],
+            competitiveDynamics: marketingIntel.competitiveDynamics || {},
+            positioning: marketingIntel.brandPositioning?.positioningStatement || "",
+            blueOceanStrategy: marketingIntel.brandPositioning?.blueOceanStrategy || {},
+            messagingArchitecture: marketingIntel.brandPositioning?.messagingArchitecture || {},
+            vulnerabilities: marketingIntel.brandPositioning?.vulnerabilities || [],
+            opportunities: marketingIntel.brandPositioning?.opportunities || [],
+          },
+          personas: marketingIntel.personas || [],
+          smvs_config: {
+            ...smvsConfig,
+            executiveSummary: marketingIntel.executiveSummary || {},
+            goToMarketInsights: marketingIntel.goToMarketInsights || {},
+            riskAnalysis: marketingIntel.riskAnalysis || {},
+            metadata: marketingIntel.metadata || {},
+          },
+          status: "COMPLETED",
+        };
+
+        console.log("Saving investment-grade results to database for test:", testId);
+        console.log("Personas count:", combinedResults.personas.length);
+        console.log("Competitors count:", combinedResults.brand_analysis.competitors.length);
+        
+        const { error: updateError } = await supabase
+          .from("tests")
+          .update(combinedResults)
+          .eq("id", testId);
+
+        if (updateError) {
+          console.error("DATABASE UPDATE FAILED:", updateError.message);
+          await supabase.from("tests").update({ status: "FAILED" }).eq("id", testId);
+          await updateJobAudit(supabase, auditId!, "FAILED", updateError.message);
+          return;
+        }
+
+        console.log("Database update successful");
+        await updateJobAudit(supabase, auditId!, "COMPLETED");
+        console.log("=== INVESTMENT-GRADE ANALYSIS COMPLETE [BACKGROUND] ===", testId);
+      } catch (bgError) {
+        const msg = bgError instanceof Error ? bgError.message : 'Background task failed';
+        console.error("=== BACKGROUND ANALYSIS FAILED ===", testId, msg);
+        await supabase.from("tests").update({ status: "FAILED" }).eq("id", testId);
+        await updateJobAudit(supabase, auditId!, "FAILED", msg);
+      }
     };
 
-    const { bayesianResults, marketingIntel } = await withTimeout(
-      analysisPromise(),
-      HARD_TIMEOUT_MS,
-      `Analysis timed out after ${HARD_TIMEOUT_MS / 1000}s`
-    );
+    // Start background task (doesn't block response)
+    EdgeRuntime.waitUntil(backgroundAnalysis());
 
-    const combinedResults = {
+    // Return immediately with Bayesian results and GENERATING status
+    console.log("=== RETURNING IMMEDIATELY - CLAUDE PROCESSING IN BACKGROUND ===");
+    return new Response(JSON.stringify({ 
+      success: true, 
+      status: "GENERATING",
       bayesian_results: bayesianResults,
-      max_diff_results: {
-        ...marketingIntel.maxDiffNarrative,
-        featureMatrix: marketingIntel.maxDiffNarrative?.featureMatrix || {},
-        roadmap: marketingIntel.maxDiffNarrative?.roadmap || {},
-      },
-      kano_results: marketingIntel.kanoAnalysis || {},
-      van_westendorp: {
-        ...marketingIntel.vanWestendorpNarrative,
-        priceArchitecture: marketingIntel.vanWestendorpNarrative?.priceArchitecture || {},
-        regionalPricing: marketingIntel.vanWestendorpNarrative?.regionalPricing || {},
-      },
-      brand_analysis: {
-        yourPosition: marketingIntel.brandPositioning?.yourPosition || {},
-        competitors: marketingIntel.competitors || [],
-        competitiveDynamics: marketingIntel.competitiveDynamics || {},
-        positioning: marketingIntel.brandPositioning?.positioningStatement || "",
-        blueOceanStrategy: marketingIntel.brandPositioning?.blueOceanStrategy || {},
-        messagingArchitecture: marketingIntel.brandPositioning?.messagingArchitecture || {},
-        vulnerabilities: marketingIntel.brandPositioning?.vulnerabilities || [],
-        opportunities: marketingIntel.brandPositioning?.opportunities || [],
-      },
-      personas: marketingIntel.personas || [],
-      // Store additional investment-grade data
-      smvs_config: {
-        ...smvsConfig,
-        executiveSummary: marketingIntel.executiveSummary || {},
-        goToMarketInsights: marketingIntel.goToMarketInsights || {},
-        riskAnalysis: marketingIntel.riskAnalysis || {},
-        metadata: marketingIntel.metadata || {},
-      },
-      status: "COMPLETED",
-    };
-
-    console.log("Saving investment-grade results to database for test:", testId);
-    console.log("Combined results keys:", Object.keys(combinedResults));
-    console.log("Personas count:", combinedResults.personas.length);
-    console.log("Competitors count:", combinedResults.brand_analysis.competitors.length);
-    
-    const { data: updateData, error: updateError } = await supabase
-      .from("tests")
-      .update(combinedResults)
-      .eq("id", testId)
-      .select();
-
-    if (updateError) {
-      console.error("DATABASE UPDATE FAILED:", updateError.message, updateError.details, updateError.hint);
-      throw new Error(`Failed to save results: ${updateError.message}`);
-    }
-
-    console.log("Database update successful, rows affected:", updateData?.length || 0);
-    await updateJobAudit(supabase, auditId!, "COMPLETED");
-
-    console.log("=== INVESTMENT-GRADE ANALYSIS COMPLETE ===", testId);
-
-    return new Response(JSON.stringify({ success: true, ...combinedResults }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      message: "Bayesian analysis complete. AI marketing analysis processing in background (~60-90s)."
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     console.error("=== ANALYSIS FAILED ===", testId, msg);
 
-    // Update test to FAILED
     if (testId) {
       await supabase.from("tests").update({ status: "FAILED" }).eq("id", testId);
     }
-
-    // Update audit
     if (auditId) {
       await updateJobAudit(supabase, auditId, "FAILED", msg);
     }

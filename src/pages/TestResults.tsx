@@ -45,6 +45,13 @@ const TestResults = () => {
 
       try {
         const testData = await getTest(testId);
+        console.log("=== FETCHED TEST DATA ===");
+        console.log("maxDiffResults:", testData?.maxDiffResults);
+        console.log("personas:", testData?.personas);
+        console.log("vanWestendorp:", testData?.vanWestendorp);
+        console.log("brandAnalysis:", testData?.brandAnalysis);
+        console.log("=== END TEST DATA ===");
+        
         if (!testData || testData.status !== "COMPLETED") {
           navigate("/dashboard");
           return;
@@ -59,7 +66,7 @@ const TestResults = () => {
     };
 
     fetchTest();
-  }, [testId, navigate]);
+  }, [testId]); // Removed navigate from deps to prevent re-fetching
 
   const handleRegenerateMarketing = async () => {
     if (!testId) return;

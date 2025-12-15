@@ -65,31 +65,83 @@ async function generateMarketingIntelligence(
   smvsConfig: SmvsConfig
 ) {
   const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
-  
+
   console.log("=== MARKETING INTELLIGENCE GENERATION ===");
   console.log("GROQ_API_KEY present:", !!GROQ_API_KEY);
   console.log("GROQ_API_KEY length:", GROQ_API_KEY?.length || 0);
-  
+
   if (!GROQ_API_KEY) {
     console.warn("❌ No Groq API key configured - using basic generation");
     return generateBasicMarketing(bayesianResults, smvsConfig);
   }
 
   const featureLines = Object.entries(bayesianResults.featureWeights || {})
-    .sort(([,a]: any, [,b]: any) => b - a)
-    .map(([feature, weight]: [string, any]) => `- ${feature}: ${(weight * 100).toFixed(1)}%`)
-    .join('\n');
+    .sort(([, a]: any, [, b]: any) => b - a)
+    .map(
+      ([feature, weight]: [string, any]) => `- ${feature}: ${(weight * 100).toFixed(1)}%`
+    )
+    .join("\n");
 
   const regionalLines = Object.entries(bayesianResults.regionalBreakdown || {})
-    .map(([region, data]: [string, any]) => 
-      `- ${region}: ${(data.demand * 100).toFixed(0)}% demand, ${data.optimalPrice} SAR optimal price`)
-    .join('\n');
+    .map(
+      ([region, data]: [string, any]) =>
+        `- ${region}: ${(data.demand * 100).toFixed(0)}% demand, ${data.optimalPrice} SAR optimal price`
+    )
+    .join("\n");
 
-  const demandCurveLines = bayesianResults.demandCurve?.slice(0, 5)
-    .map((point: any) => `- ${point.price} SAR → ${(point.demand * 100).toFixed(0)}% demand`)
-    .join('\n') || '';
+  const demandCurveLines =
+    bayesianResults.demandCurve
+      ?.slice(0, 5)
+      .map((point: any) => `- ${point.price} SAR → ${(point.demand * 100).toFixed(0)}% demand`)
+      .join("\n") || "";
 
-  const prompt = `You are an expert market research analyst specializing in GCC/MENA markets. Generate comprehensive marketing intelligence based on Bayesian analysis results.
+  // IMPORTANT: prompt schema must match what we save + what UI expects
+  const prompt = `You are an expert market research analyst specializing in GCC/MENA markets.
+Return a marketing intelligence package in VALID JSON matching this schema EXACTLY (no extra wrapper keys):
+
+{
+  "competitors": [{"name": string, "status": number, "trust": number, "upgrade": number, "overall": number, "gap": number}],
+  "maxDiffNarrative": {
+    "insight": string,
+    "featureRanking": [{"rank": number, "feature": string, "utility": number, "gap": string}]
+  },
+  "kanoAnalysis": {
+    "mustHave": [{"feature": string, "demandWithout": number, "impact": number, "reasoning": string}],
+    "performance": [{"feature": string, "demandWithout": number, "impact": number, "reasoning": string}],
+    "delighters": [{"feature": string, "demandWithout": number, "impact": number, "reasoning": string}],
+    "indifferent": [{"feature": string, "demandWithout": number, "impact": number, "reasoning": string}]
+  },
+  "vanWestendorpNarrative": {
+    "tooCheap": number,
+    "bargain": number,
+    "optimalPricePoint": number,
+    "expensive": number,
+    "tooExpensive": number,
+    "acceptableRange": [number, number],
+    "reasoning": string
+  },
+  "brandPositioning": {
+    "yourPosition": {"status": number, "trust": number, "upgrade": number, "overall": number},
+    "positioningStatement": string,
+    "vulnerabilities": [string],
+    "opportunities": [string]
+  },
+  "personas": [{
+    "name": string,
+    "segment": string,
+    "size": number,
+    "demographics": {"age": string, "income": string, "location": string},
+    "psychographics": {"quote": string, "values": [string]},
+    "bayesianProfile": {"demandProbability": number, "optimalPrice": number, "featurePreferences": object, "identityDrivers": object},
+    "recommendations": {"messaging": string, "channels": [string], "creativeAngle": string}
+  }],
+  "executiveSummary": {
+    "launchRecommendation": string,
+    "confidenceLevel": string,
+    "keyFinding": string
+  },
+  "goToMarketInsights": {"primaryChannel": string, "pricingStrategy": string, "keyMessages": [string]}
+}
 
 # PRODUCT INFORMATION
 Product Name: ${productInfo.product_name}
@@ -100,7 +152,6 @@ Price Range: ${smvsConfig.pricing.min} - ${smvsConfig.pricing.max} SAR
 Target Markets: ${Object.keys(smvsConfig.regions).join(", ")}
 
 # BAYESIAN ANALYSIS RESULTS
-## Core Metrics
 - Demand Probability: ${(bayesianResults.demandProbability * 100).toFixed(1)}%
 - PSM Confidence Score: ${bayesianResults.psmScore}/100
 - Optimal Price: ${bayesianResults.optimalPrice} SAR
@@ -119,7 +170,7 @@ ${regionalLines}
 ## Demand Curve
 ${demandCurveLines}
 
-Generate a complete marketing intelligence package in VALID JSON format with: competitors, maxDiffNarrative, kanoAnalysis, vanWestendorpNarrative, brandPositioning, personas, executiveSummary, goToMarketInsights. Respond ONLY with valid JSON.`;
+Respond ONLY with valid JSON that matches the schema (no markdown, no code fences).`;
 
   console.log("📝 Prompt length:", prompt.length, "characters");
   console.log("📊 Input data - Product:", productInfo.product_name, "| Category:", smvsConfig.category);
@@ -129,39 +180,41 @@ Generate a complete marketing intelligence package in VALID JSON format with: co
     console.log("🚀 Calling Groq API...");
     console.log("   Model: llama-3.3-70b-versatile");
     console.log("   Timeout: 45 seconds");
-    
+
     const startTime = Date.now();
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.log("⏱️ Groq API timeout triggered after 45s");
       controller.abort();
     }, 45000);
-    
+
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        Authorization: `Bearer ${GROQ_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [
-          { role: "system", content: "You are a market research analyst. Respond ONLY with valid JSON." },
-          { role: "user", content: prompt }
+          {
+            role: "system",
+            content: "You are a market research analyst. Return ONLY valid JSON matching the requested schema.",
+          },
+          { role: "user", content: prompt },
         ],
-        temperature: 0.7,
+        temperature: 0.4,
         max_tokens: 4000,
       }),
-      signal: controller.signal
+      signal: controller.signal,
     });
-    
+
     clearTimeout(timeoutId);
     const elapsed = Date.now() - startTime;
 
     console.log("📥 Groq API response received in", elapsed, "ms");
     console.log("   Status:", response.status, response.statusText);
-    console.log("   Headers:", JSON.stringify(Object.fromEntries(response.headers.entries())));
-    
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error("❌ Groq API error response:");
@@ -175,29 +228,48 @@ Generate a complete marketing intelligence package in VALID JSON format with: co
     console.log("   Choices count:", data.choices?.length || 0);
     console.log("   Usage:", JSON.stringify(data.usage || {}));
     console.log("   Finish reason:", data.choices?.[0]?.finish_reason);
-    
-    const content = data.choices[0].message.content;
+
+    const content = data.choices?.[0]?.message?.content;
     console.log("📄 Response content length:", content?.length || 0, "characters");
-    console.log("📄 Response preview:", content?.substring(0, 200) + "...");
-    
-    const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    
+    console.log("📄 Response preview:", (content || "").substring(0, 200) + "...");
+
+    if (!content) {
+      console.warn("⚠️ Groq returned empty content - falling back");
+      return generateBasicMarketing(bayesianResults, smvsConfig);
+    }
+
+    const cleanedContent = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+
+    let parsed: any;
     try {
-      const parsed = JSON.parse(cleanedContent);
-      console.log("✅ Marketing intelligence JSON parsed successfully");
-      console.log("   Keys:", Object.keys(parsed).join(", "));
-      console.log("   Competitors count:", parsed.competitors?.length || 0);
-      console.log("   Personas count:", parsed.personas?.length || 0);
-      return parsed;
+      parsed = JSON.parse(cleanedContent);
     } catch (parseError) {
       console.error("❌ Failed to parse Groq response as JSON:");
       console.error("   Parse error:", parseError);
       console.error("   Raw content (first 500 chars):", cleanedContent.substring(0, 500));
-      throw parseError;
+      return generateBasicMarketing(bayesianResults, smvsConfig);
     }
+
+    // Normalize legacy/wrapped responses
+    const root = parsed?.marketingIntelligencePackage || parsed?.marketingIntelligence || parsed;
+
+    const competitorsCount = root?.competitors?.length || 0;
+    const personasCount = root?.personas?.length || 0;
+    console.log("✅ Marketing intelligence normalized");
+    console.log("   Top-level keys:", Object.keys(root || {}).join(", "));
+    console.log("   Competitors count:", competitorsCount);
+    console.log("   Personas count:", personasCount);
+
+    // Guardrail: if model returned empty marketing, fall back to deterministic basic output
+    if (!root || competitorsCount === 0 || personasCount === 0) {
+      console.warn("⚠️ Groq returned empty/invalid marketing payload - using fallback");
+      return generateBasicMarketing(bayesianResults, smvsConfig);
+    }
+
+    return root;
   } catch (error) {
     console.error("❌ Groq API call failed:");
-    console.error("   Error type:", error?.constructor?.name);
+    console.error("   Error type:", (error as any)?.constructor?.name);
     console.error("   Error message:", error instanceof Error ? error.message : String(error));
     console.error("   Stack:", error instanceof Error ? error.stack : "N/A");
     console.log("⚠️ Falling back to basic marketing generation");
@@ -343,29 +415,55 @@ function generateBasicMarketing(bayesianResults: any, smvsConfig: SmvsConfig) {
       rank: i + 1,
       feature,
       utility: Math.round((weight as number) * 100),
-      strategicImplication: i === 0 ? "Lead with this in marketing" : 
-        i === 1 ? "Strong secondary benefit" : "Supporting feature"
+      gap: i === 0 ? 'leader' : `-${Math.round(((features[0]?.[1] as number) - (weight as number)) * 100)} vs #1`
     }))
   };
 
-  // Kano analysis
-  const kanoAnalysis = {
-    mustHaves: features.slice(0, Math.ceil(features.length / 3)).map(([f]: any) => f),
-    performanceDrivers: features.slice(Math.ceil(features.length / 3), Math.ceil(features.length * 2 / 3)).map(([f]: any) => f),
-    delighters: features.slice(Math.ceil(features.length * 2 / 3)).map(([f]: any) => f),
-    indifferent: []
+  // Kano analysis (shape must match frontend expectations)
+  const mkKanoItem = (feature: string, tier: 'must' | 'perf' | 'delight' | 'indiff') => {
+    const baseDemand = bayesianResults.demandProbability || 0.5;
+    const impact = tier === 'must' ? -30 : tier === 'perf' ? -15 : tier === 'delight' ? -6 : -2;
+    return {
+      feature,
+      demandWithout: Math.max(0, Math.min(1, baseDemand + impact / 100)),
+      impact,
+      reasoning:
+        tier === 'must'
+          ? 'Critical expectation—absence significantly reduces demand.'
+          : tier === 'perf'
+            ? 'More is better—drives measurable lift in demand.'
+            : tier === 'delight'
+              ? 'Nice-to-have—differentiates but not mandatory.'
+              : 'Low influence on purchase decision.'
+    };
   };
 
-  // Van Westendorp narrative
+  const mustHaveFeatures = features.slice(0, Math.ceil(features.length / 3)).map(([f]: any) => String(f));
+  const perfFeatures = features.slice(Math.ceil(features.length / 3), Math.ceil(features.length * 2 / 3)).map(([f]: any) => String(f));
+  const delightFeatures = features.slice(Math.ceil(features.length * 2 / 3)).map(([f]: any) => String(f));
+
+  const kanoAnalysis = {
+    mustHave: mustHaveFeatures.map((f) => mkKanoItem(f, 'must')),
+    performance: perfFeatures.map((f) => mkKanoItem(f, 'perf')),
+    delighters: delightFeatures.map((f) => mkKanoItem(f, 'delight')),
+    indifferent: [] as any[],
+  };
+
+  // Van Westendorp narrative (shape must match frontend expectations)
+  const optimal = Math.round(bayesianResults.optimalPrice || smvsConfig.pricing.target);
+  const tooCheap = Math.round(smvsConfig.pricing.min * 0.9);
+  const bargain = Math.round(smvsConfig.pricing.target * 0.85);
+  const expensive = Math.round(smvsConfig.pricing.target * 1.15);
+  const tooExpensive = Math.round(smvsConfig.pricing.max * 0.9);
+
   const vanWestendorpNarrative = {
-    optimalPricePoint: bayesianResults.optimalPrice,
-    acceptableRange: {
-      min: Math.round(smvsConfig.pricing.min * 1.1),
-      max: Math.round(smvsConfig.pricing.max * 0.9)
-    },
-    tooExpensive: smvsConfig.pricing.max,
-    tooCheap: Math.round(smvsConfig.pricing.min * 0.8),
-    insight: `Optimal pricing at ${bayesianResults.optimalPrice} SAR maximizes demand while maintaining perceived value.`
+    tooCheap,
+    bargain,
+    optimalPricePoint: optimal,
+    expensive,
+    tooExpensive,
+    acceptableRange: [Math.round(smvsConfig.pricing.target * 0.93), Math.round(smvsConfig.pricing.target * 1.2)],
+    reasoning: `Optimal pricing at ${optimal} SAR balances demand with perceived value in GCC/MENA markets.`
   };
 
   // Brand positioning
@@ -373,6 +471,7 @@ function generateBasicMarketing(bayesianResults: any, smvsConfig: SmvsConfig) {
     yourPosition: {
       status: Math.round(identitySignals.status * 100),
       trust: Math.round(identitySignals.trust * 100),
+      upgrade: Math.round(identitySignals.upgrade * 100),
       overall: Math.round((identitySignals.status + identitySignals.trust + identitySignals.upgrade) / 3 * 100)
     },
     positioningStatement: `A ${smvsConfig.category?.toLowerCase() || 'product'} that delivers on ${features[0]?.[0] || 'quality'} for discerning customers.`,
@@ -473,11 +572,11 @@ serve(async (req) => {
         yourPosition: marketingIntel.brandPositioning?.yourPosition || {},
         competitors: marketingIntel.competitors || [],
         positioning: marketingIntel.brandPositioning?.positioningStatement || "",
-        executiveSummary: marketingIntel.executiveSummary || {},
-        goToMarket: marketingIntel.goToMarketInsights || {},
+        vulnerabilities: marketingIntel.brandPositioning?.vulnerabilities || [],
+        opportunities: marketingIntel.brandPositioning?.opportunities || [],
       },
       personas: marketingIntel.personas || [],
-      status: "COMPLETED"
+      status: "COMPLETED",
     };
 
     console.log("Saving results to database for test:", testId);

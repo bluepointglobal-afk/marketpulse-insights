@@ -223,14 +223,22 @@ function transformInvestmentGradeResponse(parsed: any, bayesianResults: any, smv
   const risks = parsed.risks || {};
   const investmentThesis = parsed.investmentThesis || {};
 
+  // Helper to normalize scores to 0-100 range
+  const normalizeScore = (score: any, fallback = 50): number => {
+    const num = typeof score === 'number' ? score : parseFloat(score) || fallback;
+    // If score is > 100, likely wrong scale - normalize
+    if (num > 100) return Math.min(100, Math.round(num / 100));
+    return Math.min(100, Math.max(0, Math.round(num)));
+  };
+
   // Extract competitors in the format the UI expects
   const competitors = (competitiveLandscape.competitors || []).map((c: any) => ({
     name: c.name || "Unknown Competitor",
-    status: c.brandScores?.status || 50,
-    trust: c.brandScores?.trust || 50,
-    upgrade: c.brandScores?.upgrade || 50,
-    overall: c.brandScores?.overall || 50,
-    gap: c.brandScores?.gap || 0,
+    status: normalizeScore(c.brandScores?.status, 50),
+    trust: normalizeScore(c.brandScores?.trust, 50),
+    upgrade: normalizeScore(c.brandScores?.upgrade, 50),
+    overall: normalizeScore(c.brandScores?.overall, 50),
+    gap: typeof c.brandScores?.gap === 'number' ? c.brandScores.gap : 0,
     products: c.products || [],
     positioning: c.positioning || "",
     priceRange: c.priceRange || "",
@@ -239,6 +247,8 @@ function transformInvestmentGradeResponse(parsed: any, bayesianResults: any, smv
     weaknesses: c.weaknesses || [],
     threatLevel: c.threatLevel || "MEDIUM",
   }));
+
+  console.log("Competitors processed:", competitors.map((c: any) => ({name: c.name, status: c.status, trust: c.trust})));
 
   // Transform feature strategy to maxDiff format
   const featureAnalysis = featureStrategy.featureAnalysis || [];

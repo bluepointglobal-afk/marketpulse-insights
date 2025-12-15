@@ -33,8 +33,17 @@ function applyIdentityAdjustment(
   rawDemand: number,
   identity: { status: number; trust: number; upgrade: number }
 ): { adjusted: number; factor: number } {
-  const factor = 1.0 + (0.15 * identity.status + 0.10 * identity.trust + 0.08 * identity.upgrade)
-  const adjusted = Math.min(1.0, rawDemand * factor)
+  // Normalize identity signals to 0-1 range if they're in 0-100 range
+  const status = identity.status > 1 ? identity.status / 100 : identity.status
+  const trust = identity.trust > 1 ? identity.trust / 100 : identity.trust
+  const upgrade = identity.upgrade > 1 ? identity.upgrade / 100 : identity.upgrade
+  
+  // Factor ranges from 1.0 to ~1.33 max (when all signals are at 100%)
+  const factor = 1.0 + (0.15 * status + 0.10 * trust + 0.08 * upgrade)
+  const adjusted = Math.min(0.90, rawDemand * factor) // Cap at 90% for realism
+  
+  console.log(`Demand calc: raw=${rawDemand.toFixed(3)}, factor=${factor.toFixed(3)}, adjusted=${adjusted.toFixed(3)}`)
+  
   return { adjusted, factor }
 }
 
@@ -85,11 +94,14 @@ export async function buildBFP(input: BFPBuilderInput): Promise<BayesianFactPack
     tier: 'ESTIMATED' as const
   }
   
-  const identity = input.identity || {
-    status: 0.33,
-    trust: 0.34,
-    upgrade: 0.33,
-    method: 'regional_prior' as const
+  // Normalize identity signals - handle both 0-1 and 0-100 scales
+  const normalizeSignal = (val: number) => val > 1 ? val / 100 : val
+  
+  const identity = {
+    status: normalizeSignal(input.identity?.status ?? 0.33),
+    trust: normalizeSignal(input.identity?.trust ?? 0.34),
+    upgrade: normalizeSignal(input.identity?.upgrade ?? 0.33),
+    method: input.identity?.method || 'regional_prior' as const
   }
   
   const calibrationMap = new Map(

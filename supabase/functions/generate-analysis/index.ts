@@ -206,33 +206,206 @@ Generate a complete marketing intelligence package in VALID JSON format with: co
 }
 
 function generateBasicMarketing(bayesianResults: any, smvsConfig: SmvsConfig) {
+  console.log("📦 Generating basic marketing fallback...");
+  
   const features = Object.entries(bayesianResults.featureWeights || {})
     .sort(([,a]: any, [,b]: any) => b - a);
 
-  return {
-    competitors: [
-      { name: "Competitor A", status: 60, trust: 65, upgrade: 50, overall: 58, gap: Math.round(bayesianResults.demandProbability * 100) - 58 }
-    ],
-    maxDiffNarrative: {
-      insight: "Feature importance ranked by Bayesian weights",
-      featureRanking: features.map(([feature, weight]: any, i: number) => ({
-        rank: i + 1, feature, utility: Math.round(weight * 100), strategicImplication: "Focus marketing on this feature"
-      }))
-    },
-    personas: [{
-      name: "Primary Buyer", segment: "main", size: 0.6,
-      demographics: { age: "30-45", income: "Medium-High", location: Object.keys(smvsConfig.regions)[0] },
+  // Category-specific competitors
+  const categoryCompetitors: Record<string, string[]> = {
+    'BEVERAGES': ['Lipton', 'Nestea', 'Arizona', 'Snapple'],
+    'HEALTH_SUPPLEMENTS': ['Nature\'s Bounty', 'GNC', 'Solgar', 'NOW Foods'],
+    'SNACKS': ['Lay\'s', 'Doritos', 'Pringles', 'Cheetos'],
+    'TECH_GADGETS': ['Apple', 'Samsung', 'Sony', 'Bose'],
+    'FOOD': ['Nestle', 'Kraft', 'General Mills', 'Kellogg\'s'],
+  };
+
+  const competitorNames = categoryCompetitors[smvsConfig.category?.toUpperCase()] || 
+    ['Market Leader', 'Challenger Brand', 'Value Player'];
+
+  const competitors = competitorNames.slice(0, 3).map((name, i) => ({
+    name,
+    status: 55 + (i * 8),
+    trust: 60 + (i * 5),
+    upgrade: 45 + (i * 10),
+    overall: 55 + (i * 7),
+    gap: Math.round(bayesianResults.demandProbability * 100) - (55 + (i * 7))
+  }));
+
+  const regions = Object.keys(smvsConfig.regions);
+  const identitySignals = bayesianResults.identitySignals || { status: 0.33, trust: 0.34, upgrade: 0.33 };
+
+  // Generate meaningful personas based on identity signals
+  const personas = [];
+  
+  if (identitySignals.trust >= 0.3) {
+    personas.push({
+      name: "The Quality Seeker",
+      segment: "trust_driven",
+      size: identitySignals.trust,
+      demographics: {
+        age: "35-50",
+        income: "High",
+        location: regions[0] || "GCC"
+      },
+      psychographics: {
+        quote: "I research everything before buying - quality matters most.",
+        values: ["Quality", "Trust", "Transparency"],
+        painPoints: ["Low quality products", "Misleading claims"]
+      },
+      bayesianProfile: {
+        demandProbability: bayesianResults.demandProbability * 1.1,
+        optimalPrice: bayesianResults.optimalPrice * 1.15,
+        topFeatures: features.slice(0, 3).map(([f]: any) => f),
+        identityDrivers: { primary: "trust", weight: identitySignals.trust }
+      }
+    });
+  }
+
+  if (identitySignals.status >= 0.3) {
+    personas.push({
+      name: "The Status Conscious",
+      segment: "status_driven",
+      size: identitySignals.status,
+      demographics: {
+        age: "25-40",
+        income: "Very High",
+        location: regions[0] || "GCC"
+      },
+      psychographics: {
+        quote: "I want products that reflect my success and taste.",
+        values: ["Prestige", "Exclusivity", "Brand Image"],
+        painPoints: ["Mass market products", "Lack of exclusivity"]
+      },
+      bayesianProfile: {
+        demandProbability: bayesianResults.demandProbability * 0.9,
+        optimalPrice: bayesianResults.optimalPrice * 1.25,
+        topFeatures: features.slice(0, 3).map(([f]: any) => f),
+        identityDrivers: { primary: "status", weight: identitySignals.status }
+      }
+    });
+  }
+
+  if (identitySignals.upgrade >= 0.3) {
+    personas.push({
+      name: "The Upgrade Seeker",
+      segment: "upgrade_driven",
+      size: identitySignals.upgrade,
+      demographics: {
+        age: "28-45",
+        income: "Medium-High",
+        location: regions[1] || regions[0] || "GCC"
+      },
+      psychographics: {
+        quote: "I'm always looking for something better than what I have.",
+        values: ["Innovation", "Improvement", "Value"],
+        painPoints: ["Stagnant products", "Poor value proposition"]
+      },
       bayesianProfile: {
         demandProbability: bayesianResults.demandProbability,
         optimalPrice: bayesianResults.optimalPrice,
         topFeatures: features.slice(0, 3).map(([f]: any) => f),
-        identityDrivers: bayesianResults.identitySignals
+        identityDrivers: { primary: "upgrade", weight: identitySignals.upgrade }
       }
-    }],
+    });
+  }
+
+  // Ensure at least one persona
+  if (personas.length === 0) {
+    personas.push({
+      name: "Primary Buyer",
+      segment: "general",
+      size: 0.6,
+      demographics: {
+        age: "30-45",
+        income: "Medium-High",
+        location: regions[0] || "GCC"
+      },
+      psychographics: {
+        quote: "I want quality products at fair prices.",
+        values: ["Value", "Quality", "Convenience"],
+        painPoints: ["Overpriced products", "Poor quality"]
+      },
+      bayesianProfile: {
+        demandProbability: bayesianResults.demandProbability,
+        optimalPrice: bayesianResults.optimalPrice,
+        topFeatures: features.slice(0, 3).map(([f]: any) => f),
+        identityDrivers: identitySignals
+      }
+    });
+  }
+
+  // MaxDiff narrative
+  const maxDiffNarrative = {
+    insight: "Feature importance derived from Bayesian analysis",
+    methodology: "MaxDiff utility scoring based on feature weights",
+    featureRanking: features.map(([feature, weight]: any, i: number) => ({
+      rank: i + 1,
+      feature,
+      utility: Math.round((weight as number) * 100),
+      strategicImplication: i === 0 ? "Lead with this in marketing" : 
+        i === 1 ? "Strong secondary benefit" : "Supporting feature"
+    }))
+  };
+
+  // Kano analysis
+  const kanoAnalysis = {
+    mustHaves: features.slice(0, Math.ceil(features.length / 3)).map(([f]: any) => f),
+    performanceDrivers: features.slice(Math.ceil(features.length / 3), Math.ceil(features.length * 2 / 3)).map(([f]: any) => f),
+    delighters: features.slice(Math.ceil(features.length * 2 / 3)).map(([f]: any) => f),
+    indifferent: []
+  };
+
+  // Van Westendorp narrative
+  const vanWestendorpNarrative = {
+    optimalPricePoint: bayesianResults.optimalPrice,
+    acceptableRange: {
+      min: Math.round(smvsConfig.pricing.min * 1.1),
+      max: Math.round(smvsConfig.pricing.max * 0.9)
+    },
+    tooExpensive: smvsConfig.pricing.max,
+    tooCheap: Math.round(smvsConfig.pricing.min * 0.8),
+    insight: `Optimal pricing at ${bayesianResults.optimalPrice} SAR maximizes demand while maintaining perceived value.`
+  };
+
+  // Brand positioning
+  const brandPositioning = {
+    yourPosition: {
+      status: Math.round(identitySignals.status * 100),
+      trust: Math.round(identitySignals.trust * 100),
+      overall: Math.round((identitySignals.status + identitySignals.trust + identitySignals.upgrade) / 3 * 100)
+    },
+    positioningStatement: `A ${smvsConfig.category?.toLowerCase() || 'product'} that delivers on ${features[0]?.[0] || 'quality'} for discerning customers.`,
+    vulnerabilities: [
+      "New entrant with limited brand recognition",
+      "Price sensitivity in current market conditions"
+    ],
+    opportunities: [
+      "Growing demand for premium options in GCC",
+      "Gap in market for trust-focused positioning"
+    ]
+  };
+
+  console.log("✅ Basic marketing generated - Competitors:", competitors.length, "| Personas:", personas.length);
+
+  return {
+    competitors,
+    maxDiffNarrative,
+    kanoAnalysis,
+    vanWestendorpNarrative,
+    brandPositioning,
+    personas,
     executiveSummary: {
-      launchRecommendation: bayesianResults.psmScore > 70 ? "PROCEED" : "PROCEED_WITH_CAUTION",
-      confidenceLevel: bayesianResults.psmScore > 75 ? "HIGH" : "MEDIUM",
-      keyFinding: `${Math.round(bayesianResults.demandProbability * 100)}% demand probability with ${bayesianResults.psmScore} PSM confidence`
+      launchRecommendation: bayesianResults.psmScore >= 60 ? "PROCEED" : 
+        bayesianResults.psmScore >= 40 ? "PROCEED_WITH_CAUTION" : "REVISIT",
+      confidenceLevel: bayesianResults.psmScore >= 70 ? "HIGH" : 
+        bayesianResults.psmScore >= 50 ? "MEDIUM" : "LOW",
+      keyFinding: `${Math.round(bayesianResults.demandProbability * 100)}% demand probability with ${bayesianResults.psmScore}/100 PSM confidence`
+    },
+    goToMarketInsights: {
+      primaryChannel: "Digital marketing with regional focus",
+      pricingStrategy: `Position at ${bayesianResults.optimalPrice} SAR to maximize demand`,
+      keyMessages: features.slice(0, 3).map(([f]: any) => `Emphasize ${f}`)
     }
   };
 }

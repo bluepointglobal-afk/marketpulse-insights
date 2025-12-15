@@ -96,11 +96,31 @@ export async function runSmvsPipeline(
   
   const duration = Date.now() - startTime
   
+  // PSM is already in 0-100 range from calculateOverallPSM
+  // Clamp to ensure valid range
+  const psmScore = Math.max(0, Math.min(100, Math.round(bfp.summary.overall_psm)))
+  
+  // Calculate optimal price from demand curve (maximize demand × price utility)
+  const optimalPriceFromCurve = demandCurve.reduce((best, point) => {
+    // Utility = demand × normalized price score
+    // We want high demand at reasonable prices
+    const priceScore = 1 - Math.abs(point.price - smvsConfig.pricing.target) / (smvsConfig.pricing.max - smvsConfig.pricing.min)
+    const utility = point.demand * priceScore
+    return utility > best.utility ? { price: point.price, utility } : best
+  }, { price: smvsConfig.pricing.target, utility: 0 }).price
+  
+  // Ensure optimal price is within ±20% of target
+  const minOptimal = smvsConfig.pricing.target * 0.8
+  const maxOptimal = smvsConfig.pricing.target * 1.2
+  const clampedOptimalPrice = Math.max(minOptimal, Math.min(maxOptimal, optimalPriceFromCurve))
+  
+  console.log("📊 Pipeline results - PSM:", psmScore, "| Optimal Price:", clampedOptimalPrice, "SAR")
+  
   return {
     bfp,
     demandProbability: bfp.posteriors.demand_trial_30d.mean,
-    psmScore: Math.round(bfp.summary.overall_psm * 100),
-    optimalPrice: bfp.pricing.optimalPrice,
+    psmScore,
+    optimalPrice: Math.round(clampedOptimalPrice),
     confidenceInterval: bfp.posteriors.demand_trial_30d.ci95,
     featureWeights,
     identitySignals: {

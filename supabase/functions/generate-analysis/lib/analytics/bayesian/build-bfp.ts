@@ -68,9 +68,10 @@ async function generateSMVSHash(bfp: Partial<BayesianFactPack>): Promise<string>
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
+// PSM is now on 0-100 scale
 function generateBPCRCode(tier: string, psm: number): string {
   const tierChar = tier === 'REAL' ? 'R' : tier === 'ESTIMATED' ? 'E' : 'I'
-  const psmGrade = psm >= 0.60 ? 'A' : psm >= 0.50 ? 'B' : psm >= 0.40 ? 'C' : 'D'
+  const psmGrade = psm >= 60 ? 'A' : psm >= 50 ? 'B' : psm >= 40 ? 'C' : 'D'
   const random = Math.random().toString(36).substring(2, 6).toUpperCase()
   return `BPCR-${tierChar}${psmGrade}${random}`
 }
@@ -121,6 +122,7 @@ export async function buildBFP(input: BFPBuilderInput): Promise<BayesianFactPack
     mean: adjustedDemand
   }
   
+  // calculateOverallPSM returns 0-100 range
   const overall_psm = calculateOverallPSM({
     demand_trial_30d: demand_adjusted,
     premium_accept_20p,
@@ -129,11 +131,15 @@ export async function buildBFP(input: BFPBuilderInput): Promise<BayesianFactPack
   
   const { action, reasoning } = determineRecommendation(overall_psm)
   
-  const optimalPrice = input.targetPrice
+  // Calculate optimal price based on premium tolerance and demand
+  // If high premium tolerance, price can be closer to max range
   const premiumTolerance = premium_accept_20p.mean
+  const priceMultiplier = 0.9 + (premiumTolerance * 0.3) // 0.9x to 1.2x of target
+  const optimalPrice = Math.round(input.targetPrice * priceMultiplier)
+  
   const acceptableRange: [number, number] = [
-    input.targetPrice * 0.85,
-    input.targetPrice * 1.20
+    Math.round(input.targetPrice * 0.85),
+    Math.round(input.targetPrice * 1.20)
   ]
   
   const elasticity = premiumTolerance > 0.40 ? 'low' 
@@ -170,7 +176,7 @@ export async function buildBFP(input: BFPBuilderInput): Promise<BayesianFactPack
       online_share
     },
     summary: {
-      actionable: overall_psm >= 0.40,
+      actionable: overall_psm >= 40, // PSM is 0-100 scale
       overall_psm,
       recommendedAction: action,
       goNoGoReasoning: reasoning

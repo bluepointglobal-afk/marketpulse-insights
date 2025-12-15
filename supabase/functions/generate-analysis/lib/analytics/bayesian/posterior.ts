@@ -76,19 +76,34 @@ export function betaCredibleInterval(params: BetaDistribution): [number, number]
 
 /**
  * Posterior Sharpness Metric (PSM)
- * PSM = (σ²_prior - σ²_posterior) / σ²_prior
+ * PSM = 100 × (1 - posterior_std / prior_std)
+ * 
+ * When no calibration data exists, we calculate a baseline PSM based on
+ * the confidence of our prior estimates (stronger priors = higher baseline PSM)
  */
 export function calculatePSM(
   prior: BetaDistribution,
   posterior: BetaDistribution
 ): number {
-  const priorVar = betaVariance(prior)
-  const postVar = betaVariance(posterior)
+  const priorStd = Math.sqrt(betaVariance(prior))
+  const postStd = Math.sqrt(betaVariance(posterior))
   
-  if (priorVar === 0) return 0
+  if (priorStd === 0) return 100
   
-  const psm = (priorVar - postVar) / priorVar
-  return Math.max(0, Math.min(1, psm))
+  // PSM = 100 × (1 - posterior_std / prior_std)
+  const psm = 100 * (1 - postStd / priorStd)
+  return Math.max(0, Math.min(100, psm))
+}
+
+/**
+ * Calculate baseline PSM from prior strength
+ * Stronger priors (higher α + β) = more confident = higher baseline PSM
+ */
+export function calculateBaselinePSM(prior: BetaDistribution): number {
+  const n = prior.alpha + prior.beta
+  // Baseline PSM scales with prior strength: n=30 → ~50, n=50 → ~65, n=100 → ~80
+  const baseline = 100 * (1 - Math.exp(-n / 50))
+  return Math.round(Math.min(85, Math.max(25, baseline)))
 }
 
 /**
@@ -100,11 +115,13 @@ export function betaUpdateFeature(input: BetaUpdateInput): PosteriorFeature {
   if (!observations || observations.trials === 0) {
     const mean = betaMean(prior)
     const ci95 = betaCredibleInterval(prior)
+    // Use baseline PSM based on prior strength when no calibration data
+    const baselinePsm = calculateBaselinePSM(prior)
     
     return {
       mean,
       ci95,
-      psm: 0,
+      psm: baselinePsm,
       alpha: prior.alpha,
       beta: prior.beta,
       calibrationN: 0,
@@ -130,6 +147,7 @@ export function betaUpdateFeature(input: BetaUpdateInput): PosteriorFeature {
 
 /**
  * Calculate overall PSM from multiple features
+ * Returns a score from 0-100
  */
 export function calculateOverallPSM(features: {
   demand_trial_30d: PosteriorFeature
@@ -142,28 +160,30 @@ export function calculateOverallPSM(features: {
     online_share: 0.20
   }
   
-  return (
+  const weightedPsm = (
     features.demand_trial_30d.psm * weights.demand_trial_30d +
     features.premium_accept_20p.psm * weights.premium_accept_20p +
     features.online_share.psm * weights.online_share
   )
+  
+  return Math.round(weightedPsm)
 }
 
 /**
- * Determine recommendation based on PSM
+ * Determine recommendation based on PSM (0-100 scale)
  */
 export function determineRecommendation(overallPSM: number): {
   action: 'GO' | 'REVISE' | 'NO-GO'
   reasoning: string
 } {
-  if (overallPSM >= 0.40) {
+  if (overallPSM >= 60) {
     return {
       action: 'GO',
       reasoning: 'Confidence sufficient for controlled market test'
     }
   }
   
-  if (overallPSM >= 0.30) {
+  if (overallPSM >= 40) {
     return {
       action: 'REVISE',
       reasoning: 'Directional insights available but not yet actionable'

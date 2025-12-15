@@ -12,10 +12,12 @@ import {
   BarChart3,
   Users,
   FileText,
-  Lightbulb
+  Lightbulb,
+  RefreshCw
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTests } from "@/hooks/useTests";
+import { useToast } from "@/hooks/use-toast";
 import type { TestResults as TestResultsType } from "@/lib/mockData";
 import OverviewTab from "@/components/results/OverviewTab";
 import FeaturesTab from "@/components/results/FeaturesTab";
@@ -27,10 +29,12 @@ import ReportsTab from "@/components/results/ReportsTab";
 const TestResults = () => {
   const { testId } = useParams();
   const navigate = useNavigate();
-  const { getTest } = useTests();
+  const { getTest, regenerateMarketing } = useTests();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("overview");
   const [test, setTest] = useState<TestResultsType | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     const fetchTest = async () => {
@@ -55,7 +59,30 @@ const TestResults = () => {
     };
 
     fetchTest();
-  }, [testId, navigate, getTest]);
+  }, [testId, navigate]);
+
+  const handleRegenerateMarketing = async () => {
+    if (!testId) return;
+    setRegenerating(true);
+    try {
+      await regenerateMarketing(testId);
+      toast({
+        title: "Marketing regenerated",
+        description: "Refreshing results...",
+      });
+      // Refresh the test data
+      const updated = await getTest(testId);
+      if (updated) setTest(updated);
+    } catch (error) {
+      toast({
+        title: "Regeneration failed",
+        description: error instanceof Error ? error.message : "Please try again",
+        variant: "destructive",
+      });
+    } finally {
+      setRegenerating(false);
+    }
+  };
 
   const tabs = [
     { value: "overview", label: "Overview", icon: TrendingUp },
@@ -99,6 +126,16 @@ const TestResults = () => {
             </div>
 
             <div className="flex items-center gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleRegenerateMarketing}
+                disabled={regenerating}
+                title="Regenerate marketing intelligence (does not use credits)"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${regenerating ? 'animate-spin' : ''}`} />
+                {regenerating ? 'Regenerating...' : 'Refresh Marketing'}
+              </Button>
               <Button variant="outline" size="sm">
                 <Share2 className="w-4 h-4 mr-2" />
                 Share

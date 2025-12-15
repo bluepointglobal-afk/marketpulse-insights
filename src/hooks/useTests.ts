@@ -224,6 +224,18 @@ export function useTests() {
     });
   };
 
+  const regenerateMarketing = async (testId: string) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Not authenticated");
+
+    const response = await supabase.functions.invoke("regenerate-marketing", {
+      body: { testId }
+    });
+
+    if (response.error) throw response.error;
+    return response.data;
+  };
+
   return {
     tests,
     loading,
@@ -233,6 +245,7 @@ export function useTests() {
     deleteTest,
     getTest,
     generateAnalysis,
-    retryGeneration
+    retryGeneration,
+    regenerateMarketing
   };
 }

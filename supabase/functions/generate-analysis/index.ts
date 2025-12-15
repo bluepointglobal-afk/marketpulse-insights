@@ -318,24 +318,28 @@ function transformInvestmentGradeResponse(parsed: any, bayesianResults: any, smv
     psychologicalPricing: pricingStrategy.psychologicalPricing || {},
   };
 
-  // Brand positioning
+  // Brand positioning - normalize all scores to 0-100
+  const rawYourPosition = brandAndMessaging.competitorComparison?.yourPosition || {};
   const brandPositioning = {
-    yourPosition: brandAndMessaging.competitorComparison?.yourPosition || {
-      status: Math.round((bayesianResults.identitySignals?.status || 0.33) * 100),
-      trust: Math.round((bayesianResults.identitySignals?.trust || 0.34) * 100),
-      upgrade: Math.round((bayesianResults.identitySignals?.upgrade || 0.33) * 100),
-      overall: Math.round(bayesianResults.demandProbability * 100),
+    yourPosition: {
+      status: normalizeScore(rawYourPosition.status, Math.round((bayesianResults.identitySignals?.status || 0.33) * 100)),
+      trust: normalizeScore(rawYourPosition.trust, Math.round((bayesianResults.identitySignals?.trust || 0.34) * 100)),
+      upgrade: normalizeScore(rawYourPosition.upgrade, Math.round((bayesianResults.identitySignals?.upgrade || 0.33) * 100)),
+      overall: normalizeScore(rawYourPosition.overall, Math.round(bayesianResults.demandProbability * 100)),
+      interpretation: rawYourPosition.interpretation || "",
     },
     positioningStatement: brandAndMessaging.positioningStatement?.statement || "",
     blueOceanStrategy: brandAndMessaging.blueOceanStrategy || {},
     messagingArchitecture: brandAndMessaging.messagingArchitecture || {},
-    vulnerabilities: (brandAndMessaging.vulnerabilities || []).map((v: any) =>
+    vulnerabilities: (brandAndMessaging.vulnerabilitiesAndOpportunities?.vulnerabilities || brandAndMessaging.vulnerabilities || []).map((v: any) =>
       typeof v === "string" ? v : v.risk || ""
     ),
-    opportunities: (brandAndMessaging.opportunities || []).map((o: any) =>
+    opportunities: (brandAndMessaging.vulnerabilitiesAndOpportunities?.opportunities || brandAndMessaging.opportunities || []).map((o: any) =>
       typeof o === "string" ? o : o.opportunity || ""
     ),
   };
+  
+  console.log("Brand yourPosition normalized:", brandPositioning.yourPosition);
 
   // Transform personas
   const personas = (parsed.personas || []).map((p: any) => ({

@@ -9,10 +9,12 @@ import {
   Share2,
   TrendingUp,
   Target,
-  BarChart3,
+  Building2,
   Users,
   FileText,
-  Lightbulb,
+  Layers,
+  Rocket,
+  PiggyBank,
   RefreshCw
 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -20,10 +22,11 @@ import { useTests } from "@/hooks/useTests";
 import { useToast } from "@/hooks/use-toast";
 import type { TestResults as TestResultsType } from "@/lib/mockData";
 import OverviewTab from "@/components/results/OverviewTab";
-import FeaturesTab from "@/components/results/FeaturesTab";
-import PricingTab from "@/components/results/PricingTab";
-import BrandTab from "@/components/results/BrandTab";
-import PersonasTab from "@/components/results/PersonasTab";
+import MarketIntelligenceTab from "@/components/results/MarketIntelligenceTab";
+import CustomerInsightsTab from "@/components/results/CustomerInsightsTab";
+import ProductStrategyTab from "@/components/results/ProductStrategyTab";
+import GoToMarketTab from "@/components/results/GoToMarketTab";
+import InvestmentThesisTab from "@/components/results/InvestmentThesisTab";
 import ReportsTab from "@/components/results/ReportsTab";
 
 const TestResults = () => {
@@ -42,16 +45,8 @@ const TestResults = () => {
         navigate("/dashboard");
         return;
       }
-
       try {
         const testData = await getTest(testId);
-        console.log("=== FETCHED TEST DATA ===");
-        console.log("maxDiffResults:", testData?.maxDiffResults);
-        console.log("personas:", testData?.personas);
-        console.log("vanWestendorp:", testData?.vanWestendorp);
-        console.log("brandAnalysis:", testData?.brandAnalysis);
-        console.log("=== END TEST DATA ===");
-        
         if (!testData || testData.status !== "COMPLETED") {
           navigate("/dashboard");
           return;
@@ -64,20 +59,15 @@ const TestResults = () => {
         setLoading(false);
       }
     };
-
     fetchTest();
-  }, [testId]); // Removed navigate from deps to prevent re-fetching
+  }, [testId]);
 
   const handleRegenerateMarketing = async () => {
     if (!testId) return;
     setRegenerating(true);
     try {
       await regenerateMarketing(testId);
-      toast({
-        title: "Marketing regenerated",
-        description: "Refreshing results...",
-      });
-      // Refresh the test data
+      toast({ title: "Marketing regenerated", description: "Refreshing results..." });
       const updated = await getTest(testId);
       if (updated) setTest(updated);
     } catch (error) {
@@ -93,10 +83,11 @@ const TestResults = () => {
 
   const tabs = [
     { value: "overview", label: "Overview", icon: TrendingUp },
-    { value: "features", label: "Features", icon: BarChart3 },
-    { value: "pricing", label: "Pricing", icon: Target },
-    { value: "brand", label: "Brand", icon: Lightbulb },
-    { value: "personas", label: "Personas", icon: Users },
+    { value: "market", label: "Market Intelligence", icon: Building2 },
+    { value: "customers", label: "Customer Insights", icon: Users },
+    { value: "product", label: "Product Strategy", icon: Layers },
+    { value: "gtm", label: "Go-to-Market", icon: Rocket },
+    { value: "investment", label: "Investment Thesis", icon: PiggyBank },
     { value: "reports", label: "Reports", icon: FileText },
   ];
 
@@ -108,9 +99,9 @@ const TestResults = () => {
     );
   }
 
-  if (!test) {
-    return null;
-  }
+  if (!test) return null;
+
+  const bayesianResults = (test.bayesianResults || {}) as any;
 
   return (
     <div className="min-h-screen bg-background">
@@ -120,9 +111,7 @@ const TestResults = () => {
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-4">
               <Button variant="ghost" size="icon" asChild>
-                <Link to="/dashboard">
-                  <ArrowLeft className="w-4 h-4" />
-                </Link>
+                <Link to="/dashboard"><ArrowLeft className="w-4 h-4" /></Link>
               </Button>
               <Link to="/" className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg gradient-bg flex items-center justify-center">
@@ -131,25 +120,14 @@ const TestResults = () => {
                 <span className="font-bold gradient-text hidden sm:block">MarketPulse</span>
               </Link>
             </div>
-
             <div className="flex items-center gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={handleRegenerateMarketing}
-                disabled={regenerating}
-                title="Regenerate marketing intelligence (does not use credits)"
-              >
+              <Button variant="outline" size="sm" onClick={handleRegenerateMarketing} disabled={regenerating}>
                 <RefreshCw className={`w-4 h-4 mr-2 ${regenerating ? 'animate-spin' : ''}`} />
-                {regenerating ? 'Regenerating...' : 'Refresh Marketing'}
+                {regenerating ? 'Regenerating...' : 'Refresh'}
               </Button>
-              <Button variant="outline" size="sm">
-                <Share2 className="w-4 h-4 mr-2" />
-                Share
-              </Button>
-              <Button variant="gradient" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export
+              <Button variant="outline" size="sm"><Share2 className="w-4 h-4 mr-2" />Share</Button>
+              <Button variant="gradient" size="sm" onClick={() => setActiveTab('reports')}>
+                <Download className="w-4 h-4 mr-2" />Export
               </Button>
             </div>
           </div>
@@ -157,36 +135,28 @@ const TestResults = () => {
       </header>
 
       {/* Test Header */}
-      <div className="border-b bg-muted/30">
+      <div className="border-b bg-gradient-to-r from-primary/5 via-background to-accent/5">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold mb-1">{test.productName}</h1>
               <p className="text-muted-foreground text-sm">
-                Generated: {new Date(test.createdAt).toLocaleDateString('en-US', {
-                  month: 'long',
-                  day: 'numeric',
-                  year: 'numeric'
-                })}
+                Generated: {new Date(test.createdAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
               </p>
             </div>
-            
-            {/* Quick Stats */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-6">
               <div className="text-center">
-                <p className="text-2xl font-bold gradient-text">
-                  {Math.round(test.bayesianResults.demandProbability * 100)}%
-                </p>
+                <p className="text-2xl font-bold gradient-text">{Math.round((bayesianResults.demandProbability || 0) * 100)}%</p>
                 <p className="text-xs text-muted-foreground">Demand</p>
               </div>
               <div className="h-8 w-px bg-border" />
               <div className="text-center">
-                <p className="text-2xl font-bold text-primary">{test.bayesianResults.psmScore}</p>
+                <p className="text-2xl font-bold text-primary">{bayesianResults.psmScore || 0}</p>
                 <p className="text-xs text-muted-foreground">PSM</p>
               </div>
               <div className="h-8 w-px bg-border" />
               <div className="text-center">
-                <p className="text-2xl font-bold">{test.bayesianResults.optimalPrice}</p>
+                <p className="text-2xl font-bold">{bayesianResults.optimalPrice || 0}</p>
                 <p className="text-xs text-muted-foreground">SAR</p>
               </div>
             </div>
@@ -197,49 +167,27 @@ const TestResults = () => {
       {/* Tabs */}
       <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full justify-start h-auto p-1 bg-muted/50 rounded-xl overflow-x-auto">
+          <TabsList className="w-full justify-start h-auto p-1 bg-muted/50 rounded-xl overflow-x-auto flex-wrap">
             {tabs.map((tab) => (
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className="flex items-center gap-2 px-4 py-2 data-[state=active]:gradient-bg data-[state=active]:text-primary-foreground rounded-lg"
+                className="flex items-center gap-2 px-3 py-2 data-[state=active]:gradient-bg data-[state=active]:text-primary-foreground rounded-lg text-sm"
               >
                 <tab.icon className="w-4 h-4" />
-                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="hidden md:inline">{tab.label}</span>
               </TabsTrigger>
             ))}
           </TabsList>
 
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.2 }}
-            className="mt-6"
-          >
-            <TabsContent value="overview" className="m-0">
-              <OverviewTab test={test} />
-            </TabsContent>
-            
-            <TabsContent value="features" className="m-0">
-              <FeaturesTab test={test} />
-            </TabsContent>
-            
-            <TabsContent value="pricing" className="m-0">
-              <PricingTab test={test} />
-            </TabsContent>
-            
-            <TabsContent value="brand" className="m-0">
-              <BrandTab test={test} />
-            </TabsContent>
-            
-            <TabsContent value="personas" className="m-0">
-              <PersonasTab test={test} />
-            </TabsContent>
-            
-            <TabsContent value="reports" className="m-0">
-              <ReportsTab test={test} />
-            </TabsContent>
+          <motion.div key={activeTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="mt-6">
+            <TabsContent value="overview" className="m-0"><OverviewTab test={test} /></TabsContent>
+            <TabsContent value="market" className="m-0"><MarketIntelligenceTab test={test} /></TabsContent>
+            <TabsContent value="customers" className="m-0"><CustomerInsightsTab test={test} /></TabsContent>
+            <TabsContent value="product" className="m-0"><ProductStrategyTab test={test} /></TabsContent>
+            <TabsContent value="gtm" className="m-0"><GoToMarketTab test={test} /></TabsContent>
+            <TabsContent value="investment" className="m-0"><InvestmentThesisTab test={test} /></TabsContent>
+            <TabsContent value="reports" className="m-0"><ReportsTab test={test} /></TabsContent>
           </motion.div>
         </Tabs>
       </div>

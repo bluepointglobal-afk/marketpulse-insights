@@ -255,7 +255,6 @@ serve(async (req) => {
 
     const combinedResults = {
       bayesian_results: bayesianResults,
-      competitors: marketingIntel.competitors || [],
       max_diff_results: marketingIntel.maxDiffNarrative || {},
       kano_results: marketingIntel.kanoAnalysis || {},
       van_westendorp: marketingIntel.vanWestendorpNarrative || {},
@@ -263,6 +262,8 @@ serve(async (req) => {
         yourPosition: marketingIntel.brandPositioning?.yourPosition || {},
         competitors: marketingIntel.competitors || [],
         positioning: marketingIntel.brandPositioning?.positioningStatement || "",
+        executiveSummary: marketingIntel.executiveSummary || {},
+        goToMarket: marketingIntel.goToMarketInsights || {},
       },
       personas: marketingIntel.personas || [],
       status: "COMPLETED"

@@ -1,11 +1,5 @@
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export async function generatePDF(data: any): Promise<Blob> {
   const doc = new jsPDF();
@@ -48,7 +42,7 @@ export async function generatePDF(data: any): Promise<Blob> {
     ['Recommendation', investmentThesis?.recommendation?.recommendation || (bayesianResults.psmScore > 60 ? 'PROCEED' : 'PROCEED WITH CAUTION')]
   ];
 
-  doc.autoTable({
+  autoTable(doc, {
     startY: yPos,
     head: [['Metric', 'Value']],
     body: metricsData,
@@ -130,7 +124,7 @@ export async function generatePDF(data: any): Promise<Blob> {
       comp.marketShare || 'N/A'
     ]);
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: yPos,
       head: [['Competitor', 'Brand Score', 'Threat', 'Price Range', 'Market Share']],
       body: compData,
@@ -160,7 +154,7 @@ export async function generatePDF(data: any): Promise<Blob> {
       ['Bear Case - Year 3', scenarios?.bearCase?.year3?.revenue || 'N/A', scenarios?.bearCase?.year3?.customers || 'N/A']
     ];
 
-    doc.autoTable({
+    autoTable(doc, {
       startY: yPos,
       head: [['Scenario', 'Revenue', 'Customers']],
       body: scenarioData,

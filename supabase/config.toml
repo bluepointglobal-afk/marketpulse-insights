@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.regenerate-marketing]
 verify_jwt = false
+
+[functions.perplexity-research]
+verify_jwt = false

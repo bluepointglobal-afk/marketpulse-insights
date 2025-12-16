@@ -127,23 +127,27 @@ export function useTests() {
     priceTarget: number;
     priceMax: number;
     features: string[];
+    founderBrief?: Record<string, unknown>;
   }) => {
     if (!user) throw new Error("Not authenticated");
 
+    const insertData = {
+      user_id: user.id,
+      product_name: testData.productName,
+      product_description: testData.productDescription,
+      category: testData.category,
+      target_market: testData.targetMarket,
+      price_min: testData.priceMin,
+      price_target: testData.priceTarget,
+      price_max: testData.priceMax,
+      features: testData.features,
+      smvs_config: testData.founderBrief ? { founderBrief: testData.founderBrief } : null,
+      status: "DRAFT" as const
+    };
+
     const { data, error } = await supabase
       .from("tests")
-      .insert({
-        user_id: user.id,
-        product_name: testData.productName,
-        product_description: testData.productDescription,
-        category: testData.category,
-        target_market: testData.targetMarket,
-        price_min: testData.priceMin,
-        price_target: testData.priceTarget,
-        price_max: testData.priceMax,
-        features: testData.features,
-        status: "DRAFT"
-      })
+      .insert(insertData as any)
       .select()
       .single();
 

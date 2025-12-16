@@ -133,7 +133,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
     ['Competitors', `${competitors.length} analyzed`, competitors.slice(0, 2).map((c: any) => c.name).join(', ') || 'Key players'],
   ];
   
-  summarySlide.addTable(metrics, {
+  summarySlide.addTable(toTableRows(metrics), {
     x: 0.5, y: 2, w: 9,
     rowH: 0.4,
     fill: { color: 'F8F8FF' },
@@ -189,7 +189,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
     ['SOM (Y3)', safeText(marketSize.som?.value, 'USD 15M')],
   ];
   
-  marketSlide.addTable(sizingData, {
+  marketSlide.addTable(toTableRows(sizingData), {
     x: 0.5, y: 1.4, w: 4, rowH: 0.5,
     fontSize: 12,
     color: '374151',
@@ -214,7 +214,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
         ['Qatar', formatPercent((bayesianResults.demandProbability || 0.6) * 0.95), formatSAR((optimalPrice || 50) * 1.2)],
       ];
   
-  marketSlide.addTable([['Region', 'Demand', 'Price'], ...regTable], {
+  marketSlide.addTable(toTableRows([['Region', 'Demand', 'Price'], ...regTable]), {
     x: 5, y: 1.4, w: 4.5, rowH: 0.4,
     fontSize: 10,
     color: '374151',
@@ -295,7 +295,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
       ['Occupation', safeText(demo.occupation, 'Professional')],
     ];
     
-    personaSlide.addTable(demoData, {
+    personaSlide.addTable(toTableRows(demoData), {
       x: 0.5, y: 2.3, w: 4.3, rowH: 0.35,
       fontSize: 10,
       color: '374151',
@@ -315,7 +315,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
       ['LTV:CAC', `${persona.lifetimeValue?.ltvCacRatio || 4}:1`],
     ];
     
-    personaSlide.addTable(bayesData, {
+    personaSlide.addTable(toTableRows(bayesData), {
       x: 5, y: 2.3, w: 4.5, rowH: 0.35,
       fontSize: 10,
       color: '374151',
@@ -346,7 +346,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
           formatSAR(ch.cac || 50),
         ]);
         
-        personaSlide.addTable([['Channel', 'Budget', 'CAC'], ...channelData], {
+        personaSlide.addTable(toTableRows([['Channel', 'Budget', 'CAC'], ...channelData]), {
           x: 0.5, y: 4.7, w: 9, rowH: 0.3,
           fontSize: 9,
           color: '374151',
@@ -381,7 +381,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
       ])
     ];
     
-    compSlide.addTable(compData, {
+    compSlide.addTable(toTableRows(compData), {
       x: 0.5, y: 1, w: 9, rowH: 0.45,
       fontSize: 10,
       color: '374151',
@@ -406,7 +406,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
       ['Rivalry', safeText(porters.competitiveRivalry?.level, 'HIGH')],
     ];
     
-    compSlide.addTable(forcesData, {
+    compSlide.addTable(toTableRows(forcesData), {
       x: 0.5, y: 4.4, w: 9, rowH: 0.3,
       fontSize: 10,
       color: '374151',
@@ -447,7 +447,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
     ['Too Expensive', formatSAR(vw.tooExpensive?.price || vw.tooExpensive)],
   ];
   
-  pricingSlide.addTable(vwData, {
+  pricingSlide.addTable(toTableRows(vwData), {
     x: 0.5, y: 1.4, w: 4, rowH: 0.35,
     fontSize: 10,
     color: '374151',
@@ -473,7 +473,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
       ])
     ];
     
-    pricingSlide.addTable(tierData, {
+    pricingSlide.addTable(toTableRows(tierData), {
       x: 5, y: 1.4, w: 4.5, rowH: 0.35,
       fontSize: 10,
       color: '374151',
@@ -524,7 +524,7 @@ export async function generatePPTX(data: any): Promise<Blob> {
       ])
     ];
     
-    gtmSlide.addTable(channelData, {
+    gtmSlide.addTable(toTableRows(channelData), {
       x: 0.5, y: 1.4, w: 9, rowH: 0.35,
       fontSize: 10,
       color: '374151',
